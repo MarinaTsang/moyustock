@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>股票行情</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      width: 280px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 12px;
+      background: #f5f5f5;
+      color: #333;
+    }
+    
+    /* Monitor View */
+    #monitor-view {
+      padding: 0;
+      min-height: 60px;
+    }
+    .monitor-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      border-bottom: 1px solid #e8e8e8;
+      background: #fafafa;
+      flex-shrink: 0;
+    }
+    .market-index {
+      font-size: 12px;
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+    }
+    .market-index .idx-value {
+      font-weight: 600;
+      margin-right: 4px;
+    }
+    .market-index .idx-pct {
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .market-index .idx-value.up,
+    .market-index .idx-pct.up { color: #c0392b; }
+    .market-index .idx-value.down,
+    .market-index .idx-pct.down { color: #27ae60; }
+    .market-index .idx-value.neutral,
+    .market-index .idx-pct.neutral { color: #666; }
+    .market-index .status-stale { color: #999; font-size: 11px; margin-left: 6px; font-weight: normal; }
+    .market-index .status-offline { color: #e74c3c; font-size: 11px; margin-left: 6px; font-weight: normal; }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .header-btn {
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 14px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .header-btn:hover {
+      background: #eee;
+    }
+    #monitor-view #stock-list {
+      padding: 10px;
+    }
+    #monitor-view .stock-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      margin-bottom: 4px;
+      background: #fff;
+      border-radius: 4px;
+      border: 1px solid #e0e0e0;
+    }
+    #monitor-view .stock-item:last-child {
+      margin-bottom: 0;
+    }
+    #monitor-view .stock-name {
+      font-weight: 500;
+      color: #333;
+      flex: 1;
+      margin-right: 8px;
+    }
+    #monitor-view .stock-price {
+      font-weight: 600;
+      margin-right: 8px;
+      min-width: 60px;
+      text-align: right;
+    }
+    #monitor-view .stock-change {
+      font-weight: 500;
+      min-width: 50px;
+      text-align: right;
+    }
+    #monitor-view .stock-price.up,
+    #monitor-view .stock-change.up {
+      color: #c0392b;
+    }
+    #monitor-view .stock-price.down,
+    #monitor-view .stock-change.down {
+      color: #27ae60;
+    }
+    #monitor-view .stock-item.loading {
+      color: #999;
+      font-size: 11px;
+    }
+    #monitor-view .stock-item.error {
+      color: #e74c3c;
+      font-size: 11px;
+    }
+    #monitor-view .stock-item.stale .stock-change {
+      color: #999;
+    }
+    #monitor-view {
+      position: relative;
+    }
+    
+    /* Settings View */
+    #settings-view {
+      padding: 10px;
+    }
+    #settings-view .header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    #settings-view .back-btn {
+      margin-right: 8px;
+      padding: 4px 8px;
+      font-size: 11px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      cursor: pointer;
+      color: #666;
+    }
+    #settings-view .back-btn:hover {
+      background: #f0f0f0;
+    }
+    #settings-view .title {
+      font-weight: 600;
+      font-size: 13px;
+    }
+    #settings-view .input-group {
+      display: flex;
+      margin-bottom: 12px;
+      gap: 6px;
+    }
+    #settings-view .stock-input {
+      flex: 1;
+      padding: 6px 8px;
+      font-size: 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #fff;
+    }
+    #settings-view .add-btn {
+      padding: 6px 12px;
+      font-size: 12px;
+      background: #4a90e2;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #settings-view .add-btn:hover {
+      background: #357abd;
+    }
+    #settings-view .stock-list {
+      list-style: none;
+    }
+    #settings-view .stock-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      margin-bottom: 4px;
+      background: #fff;
+      border-radius: 4px;
+      border: 1px solid #e0e0e0;
+    }
+    #settings-view .stock-list-item:last-child {
+      margin-bottom: 0;
+    }
+    #settings-view .stock-code {
+      flex: 1;
+      font-size: 12px;
+      color: #333;
+    }
+    #settings-view .delete-btn {
+      padding: 2px 8px;
+      font-size: 11px;
+      background: #e74c3c;
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    #settings-view .delete-btn:hover {
+      background: #c0392b;
+    }
+    #settings-view .empty-tip {
+      text-align: center;
+      color: #999;
+      font-size: 11px;
+      padding: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <!-- Monitor View -->
+  <div id="monitor-view">
+    <div class="monitor-header">
+      <div id="market-index" class="market-index"></div>
+      <div class="header-actions">
+        <button class="header-btn" id="settings-btn" title="设置">⚙️</button>
+      </div>
+    </div>
+    <div id="stock-list"></div>
+  </div>
+  
+  <!-- Settings View -->
+  <div id="settings-view" style="display:none">
+    <div class="header">
+      <button class="back-btn" id="back-btn">← 返回</button>
+      <div class="title">股票设置</div>
+    </div>
+    <div class="input-group">
+      <input type="text" class="stock-input" id="stock-input" placeholder="输入代码如 600519，美股带前缀us">
+      <button class="add-btn" id="add-btn">添加</button>
+    </div>
+    <ul class="stock-list" id="settings-stock-list"></ul>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

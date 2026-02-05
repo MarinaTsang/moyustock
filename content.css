@@ -1,0 +1,359 @@
+/* 摸鱼看盘 - 悬浮窗 */
+#lt-stock-float {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 2147483647;
+  width: 188px;
+  min-width: 120px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #333;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  user-select: none;
+  -webkit-user-select: none;
+  border: 1px solid rgba(0,0,0,0.06);
+  transition: opacity 0.4s ease, background-color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+/* 存在感三态：默认静默态，降低存在感 */
+#lt-stock-float.lt-state-silent {
+  opacity: 0.4;
+  background-color: #f5f5f5;
+  border-color: rgba(0, 0, 0, 0.03);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+#lt-stock-float.lt-state-active {
+  opacity: 0.8;
+  background-color: #ffffff;
+}
+
+#lt-stock-float.lt-state-critical {
+  opacity: 1;
+  background-color: #fffef0; /* 轻微高亮，避免刺眼 */
+  border-color: #c0392b;
+  border-width: 2px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+
+/* 关键态下整体主要下跌时使用冷色调与绿色边框 */
+#lt-stock-float.lt-state-critical.lt-critical-down {
+  background-color: #f0f8ff;
+  border-color: #27ae60;
+}
+
+#lt-stock-float.lt-dragging {
+  cursor: grabbing;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+}
+
+/* 顶部栏：保存在最左，⚙️×在最右 */
+#lt-stock-float .lt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  border-bottom: 1px solid #eee;
+  cursor: move;
+}
+
+#lt-stock-float .lt-header-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+#lt-stock-float .lt-market-index {
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+#lt-stock-float .lt-market-index .lt-idx-value {
+  font-weight: 600;
+  margin-right: 4px;
+}
+#lt-stock-float .lt-market-index .lt-idx-pct {
+  font-size: 11px;
+  font-weight: 500;
+}
+#lt-stock-float .lt-market-index .lt-idx-up { color: #c0392b; }
+#lt-stock-float .lt-market-index .lt-idx-down { color: #27ae60; }
+#lt-stock-float .lt-market-index .lt-idx-neutral { color: #666; }
+
+#lt-stock-float .lt-mood-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-left: 4px;
+  background-color: #bbb;
+}
+
+/* 情绪小圆点颜色随三态变化 */
+#lt-stock-float.lt-state-silent .lt-mood-dot {
+  background-color: #bbb;
+}
+
+#lt-stock-float.lt-state-active .lt-mood-dot {
+  background-color: #27ae60;
+}
+
+#lt-stock-float.lt-state-critical .lt-mood-dot {
+  background-color: #c0392b;
+}
+
+#lt-stock-float.lt-state-critical.lt-critical-down .lt-mood-dot {
+  background-color: #27ae60;
+}
+
+#lt-stock-float .lt-header-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+#lt-stock-float .lt-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 4px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#lt-stock-float .lt-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+#lt-stock-float .lt-btn-save {
+  width: auto;
+  min-width: 32px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+#lt-stock-float .lt-btn-close {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* 主体 */
+#lt-stock-float .lt-body {
+  padding: 6px 8px;
+}
+
+#lt-stock-float .lt-tip {
+  font-size: 11px;
+  color: #999;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+/* 股票列表面板 - 左对齐 */
+#lt-stock-float .lt-stock-list-viewport {
+  overflow: hidden;
+  min-height: 24px;
+}
+
+/* 超过 3 只时固定高度为 3 行，避免轮播时弹窗高度变化 */
+#lt-stock-float .lt-stock-list-viewport.lt-viewport-fixed {
+  height: 74px; /* 3×22 + 2×4 gap */
+}
+
+#lt-stock-float .lt-stock-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 24px;
+  text-align: left;
+}
+
+#lt-stock-float .lt-stock-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: nowrap;
+  height: 22px;
+  box-sizing: border-box;
+}
+
+/* 名称最多 5 个字，多余省略 */
+#lt-stock-float .lt-stock-row .lt-name {
+  font-weight: 500;
+  font-size: 12px;
+  color: #1a1a1a;
+  width: 5em;
+  min-width: 5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 6px;
+  text-align: left;
+}
+
+#lt-stock-float .lt-stock-row .lt-price {
+  font-size: 13px;
+  font-weight: 600;
+  margin-right: 6px;
+  min-width: 52px;
+  text-align: right;
+}
+
+#lt-stock-float .lt-stock-row .lt-change {
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 52px;
+  text-align: right;
+}
+
+#lt-stock-float .lt-stock-row .lt-price.up,
+#lt-stock-float .lt-stock-row .lt-change.up {
+  color: #c0392b;
+}
+
+#lt-stock-float .lt-stock-row .lt-price.down,
+#lt-stock-float .lt-stock-row .lt-change.down {
+  color: #27ae60;
+}
+
+#lt-stock-float .lt-stock-row .lt-change.lt-suspended {
+  color: #999;
+  font-weight: normal;
+}
+
+#lt-stock-float .lt-stock-row.lt-error .lt-name,
+#lt-stock-float .lt-stock-row.lt-error .lt-change {
+  color: #e74c3c;
+  font-size: 11px;
+}
+
+#lt-stock-float .lt-stock-row.lt-row-blank .lt-name,
+#lt-stock-float .lt-stock-row.lt-row-blank .lt-price,
+#lt-stock-float .lt-stock-row.lt-row-blank .lt-change {
+  color: #ccc;
+}
+
+/* 关键态霸屏：关键股行高亮 */
+#lt-stock-float .lt-stock-row.lt-row-critical {
+  font-weight: 600;
+}
+/* 新暴雷：背景色 + 轻微抖动 */
+#lt-stock-float .lt-stock-row.lt-row-critical-new.lt-up {
+  background-color: rgba(231, 76, 60, 0.1);
+  animation: lt-shake 0.6s ease-in-out 1;
+}
+#lt-stock-float .lt-stock-row.lt-row-critical-new.lt-down {
+  background-color: rgba(39, 174, 96, 0.1);
+  animation: lt-shake 0.6s ease-in-out 1;
+}
+@keyframes lt-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-1px); }
+  40% { transform: translateX(1px); }
+  60% { transform: translateX(-1px); }
+  80% { transform: translateX(1px); }
+}
+/* 已读暴雷：保留 🔥 与加粗，背景变淡 */
+#lt-stock-float .lt-stock-row.lt-row-critical-old.lt-up {
+  background-color: rgba(231, 76, 60, 0.04);
+}
+#lt-stock-float .lt-stock-row.lt-row-critical-old.lt-down {
+  background-color: rgba(39, 174, 96, 0.04);
+}
+
+/* 设置面板 */
+#lt-stock-float .lt-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#lt-stock-float .lt-settings-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+#lt-stock-float .lt-settings-input {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+#lt-stock-float .lt-settings-add {
+  padding: 6px 12px;
+  font-size: 12px;
+  background: #4a90e2;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#lt-stock-float .lt-settings-add:hover {
+  background: #357abd;
+}
+
+#lt-stock-float .lt-settings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+
+#lt-stock-float .lt-settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+#lt-stock-float .lt-settings-item:last-child {
+  border-bottom: none;
+}
+
+#lt-stock-float .lt-settings-code {
+  font-size: 12px;
+  color: #333;
+}
+
+#lt-stock-float .lt-settings-del {
+  padding: 2px 8px;
+  font-size: 11px;
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+#lt-stock-float .lt-settings-del:hover {
+  background: #c0392b;
+}
+
+#lt-stock-float .lt-settings-empty {
+  text-align: center;
+  color: #999;
+  font-size: 11px;
+  padding: 16px;
+}

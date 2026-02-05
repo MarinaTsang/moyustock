@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "股票行情",
+  "version": "1.0",
+  "description": "摸鱼看盘 - 在网页右下角以低打扰浮窗方式显示自选股票和大盘指数行情，不上传任何用户数据，仅访问 http://qt.gtimg.cn/* 获取行情。",
+  "permissions": ["scripting", "tabs", "storage"],
+  "host_permissions": [
+    "http://qt.gtimg.cn/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "icons": {
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "点击显示/唤醒股票浮窗",
+    "default_icon": {
+      "48": "icons/icon48.png"
+    }
+  }
+}
