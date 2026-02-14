@@ -12,10 +12,10 @@
   color: #333;
   background: #fff;
   border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
   user-select: none;
   -webkit-user-select: none;
-  border: 1px solid rgba(0,0,0,0.06);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   transition: opacity 0.4s ease, background-color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
 }
 
@@ -34,7 +34,8 @@
 
 #lt-stock-float.lt-state-critical {
   opacity: 1;
-  background-color: #fffef0; /* 轻微高亮，避免刺眼 */
+  background-color: #fffef0;
+  /* 轻微高亮，避免刺眼 */
   border-color: #c0392b;
   border-width: 2px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
@@ -48,7 +49,7 @@
 
 #lt-stock-float.lt-dragging {
   cursor: grabbing;
-  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
 }
 
 /* 顶部栏：保存在最左，⚙️×在最右 */
@@ -74,17 +75,28 @@
   min-width: 0;
   text-align: left;
 }
+
 #lt-stock-float .lt-market-index .lt-idx-value {
   font-weight: 600;
   margin-right: 4px;
 }
+
 #lt-stock-float .lt-market-index .lt-idx-pct {
   font-size: 11px;
   font-weight: 500;
 }
-#lt-stock-float .lt-market-index .lt-idx-up { color: #c0392b; }
-#lt-stock-float .lt-market-index .lt-idx-down { color: #27ae60; }
-#lt-stock-float .lt-market-index .lt-idx-neutral { color: #666; }
+
+#lt-stock-float .lt-market-index .lt-idx-up {
+  color: #c0392b;
+}
+
+#lt-stock-float .lt-market-index .lt-idx-down {
+  color: #27ae60;
+}
+
+#lt-stock-float .lt-market-index .lt-idx-neutral {
+  color: #666;
+}
 
 #lt-stock-float .lt-mood-dot {
   width: 6px;
@@ -170,7 +182,8 @@
 
 /* 超过 3 只时固定高度为 3 行，避免轮播时弹窗高度变化 */
 #lt-stock-float .lt-stock-list-viewport.lt-viewport-fixed {
-  height: 74px; /* 3×22 + 2×4 gap */
+  height: 114px;
+  /* 3×(22+12) + 2×4 gap = 114px */
 }
 
 #lt-stock-float .lt-stock-list {
@@ -183,11 +196,12 @@
 
 #lt-stock-float .lt-stock-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-start;
   text-align: left;
   white-space: nowrap;
-  height: 22px;
+  min-height: 22px;
   box-sizing: border-box;
 }
 
@@ -211,6 +225,50 @@
   margin-right: 6px;
   min-width: 52px;
   text-align: right;
+}
+
+/* 分时走势线容器 — 独占一行显示在价格下方 */
+#lt-stock-float .lt-stock-row .lt-trend {
+  width: 100%;
+  height: 12px;
+  display: block;
+  margin-top: 1px;
+}
+
+#lt-stock-float .lt-stock-row .lt-trend:empty {
+  display: none;
+  /* 无数据时不占用空间 */
+}
+
+#lt-stock-float .lt-stock-row .lt-trend svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* 走势线路径样式 */
+#lt-stock-float .lt-stock-row .lt-trend path {
+  fill: none;
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* 涨跌颜色 */
+#lt-stock-float .lt-stock-row .lt-trend path.up {
+  stroke: #e74c3c;
+  opacity: 0.6;
+}
+
+#lt-stock-float .lt-stock-row .lt-trend path.down {
+  stroke: #27ae60;
+  opacity: 0.6;
+}
+
+#lt-stock-float .lt-stock-row .lt-trend path.flat {
+  stroke: #999;
+  opacity: 0.6;
 }
 
 #lt-stock-float .lt-stock-row .lt-change {
@@ -251,26 +309,47 @@
 #lt-stock-float .lt-stock-row.lt-row-critical {
   font-weight: 600;
 }
+
 /* 新暴雷：背景色 + 轻微抖动 */
 #lt-stock-float .lt-stock-row.lt-row-critical-new.lt-up {
   background-color: rgba(231, 76, 60, 0.1);
   animation: lt-shake 0.6s ease-in-out 1;
 }
+
 #lt-stock-float .lt-stock-row.lt-row-critical-new.lt-down {
   background-color: rgba(39, 174, 96, 0.1);
   animation: lt-shake 0.6s ease-in-out 1;
 }
+
 @keyframes lt-shake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-1px); }
-  40% { transform: translateX(1px); }
-  60% { transform: translateX(-1px); }
-  80% { transform: translateX(1px); }
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20% {
+    transform: translateX(-1px);
+  }
+
+  40% {
+    transform: translateX(1px);
+  }
+
+  60% {
+    transform: translateX(-1px);
+  }
+
+  80% {
+    transform: translateX(1px);
+  }
 }
+
 /* 已读暴雷：保留 🔥 与加粗，背景变淡 */
 #lt-stock-float .lt-stock-row.lt-row-critical-old.lt-up {
   background-color: rgba(231, 76, 60, 0.04);
 }
+
 #lt-stock-float .lt-stock-row.lt-row-critical-old.lt-down {
   background-color: rgba(39, 174, 96, 0.04);
 }

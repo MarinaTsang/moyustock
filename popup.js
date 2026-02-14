@@ -1,9 +1,14 @@
+/**
+ * Popup 脚本：点击扩展图标后若打开的是“弹窗”则运行在此（本扩展当前点击图标由 background 发 SHOW_FLOAT，不直接开 popup）。
+ * 若从别处打开 popup（如右键菜单），则本脚本负责：从 chrome.storage.local 读/写 stockList、请求行情、展示监控/设置界面。
+ * 与 content.js 共享同一份 storage，两边改 stockList 会通过 storage 同步。
+ */
 (function () {
   const DEFAULT_STOCK = 'sh600519';
-  const MARKET_INDEX_CODE = 'sh000001'; // 上证指数，标题栏常驻，不参与轮播
-  const ROTATE_INTERVAL = 5000; // 5秒轮播
-  const MAX_DISPLAY = 3; // 最多显示3行
-  const FETCH_TIMEOUT_MS = 3000; // 请求超时 3 秒
+  const MARKET_INDEX_CODE = 'sh000001';
+  const ROTATE_INTERVAL = 5000;
+  const MAX_DISPLAY = 3;
+  const FETCH_TIMEOUT_MS = 3000;
 
   const monitorView = document.getElementById('monitor-view');
   const settingsView = document.getElementById('settings-view');

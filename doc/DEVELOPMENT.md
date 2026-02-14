@@ -308,6 +308,24 @@ if (lastMarketIndexData) {
 }
 ```
 
+### 3.6 分时走势实现（新增）
+
+**数据源**：
+- 使用 `web.ifzq.gtimg.cn` 接口获取分时数据（JSON格式）。
+- 接口地址：`http://web.ifzq.gtimg.cn/appstock/app/minute/query?code={code}`
+
+**实现逻辑**：
+1. **获取数据**：
+   - Background Script 增加 `GET_TREND` 消息处理。
+   - 解析 JSON 响应，提取 `data[code].data.data` 数组。
+   - 数据格式为 `"0930 价格 成交量..."` 字符串数组。
+
+2. **绘制图形**：
+   - 使用 SVG `<path>` 元素绘制走势线。
+   - 根据当前价格与昨日收盘价（或今日开盘价）决定线条颜色（红/绿）。
+   - 将价格数组映射到 SVG 坐标系（0-100% 宽度，价格极值映射高度）。
+   - 添加到 `.lt-stock-row` 的新容器 `.lt-trend` 中。
+
 ## 4. 数据存储
 
 ### 4.1 chrome.storage.local
