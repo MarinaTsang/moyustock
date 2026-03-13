@@ -1,428 +1,679 @@
-/**
- * Popup 脚本：点击扩展图标后若打开的是“弹窗”则运行在此（本扩展当前点击图标由 background 发 SHOW_FLOAT，不直接开 popup）。
- * 若从别处打开 popup（如右键菜单），则本脚本负责：从 chrome.storage.local 读/写 stockList、请求行情、展示监控/设置界面。
- * 与 content.js 共享同一份 storage，两边改 stockList 会通过 storage 同步。
- */
 (function () {
+  const shared = globalThis.LTShared;
+  const market = globalThis.LTMarket;
   const DEFAULT_STOCK = 'sh600519';
-  const MARKET_INDEX_CODE = 'sh000001';
-  const ROTATE_INTERVAL = 5000;
-  const MAX_DISPLAY = 3;
-  const FETCH_TIMEOUT_MS = 3000;
+  const BOSS_KEY_STORAGE = 'userHidden';
+  const DISPLAY_MODE_STORAGE = 'displayMode';
 
-  const monitorView = document.getElementById('monitor-view');
-  const settingsView = document.getElementById('settings-view');
-  const stockListEl = document.getElementById('stock-list');
-  const marketIndexEl = document.getElementById('market-index');
-  const settingsBtn = document.getElementById('settings-btn');
-  const backBtn = document.getElementById('back-btn');
+  if (!shared || !market) {
+    console.error('Popup 依赖未加载');
+    return;
+  }
+
+  const wakeBtn = document.getElementById('wake-float-btn');
   const stockInput = document.getElementById('stock-input');
   const addBtn = document.getElementById('add-btn');
-  const settingsStockList = document.getElementById('settings-stock-list');
+  const stockListEl = document.getElementById('stock-list');
+  const statusEl = document.getElementById('status-text');
+  const summaryEl = document.getElementById('summary-text');
+  const hiddenStateEl = document.getElementById('hidden-state');
+  const tradingStateEl = document.getElementById('trading-state');
+  const updateTimeEl = document.getElementById('update-time');
 
   let stockList = [];
-  let rotateTimer = null;
-  let marketIndexTimer = null; // 大盘指数定时刷新
-  let currentPage = 0;
-  let currentDisplayCodes = []; // 当前显示的股票代码列表
-  let lastMarketIndexData = null; // 上次成功的大盘数据，用于失败时保留展示
-  let lastStockDataByCode = {};   // 上次成功的各股票数据，用于失败时保留展示
-  
-  /**
-   * 根据代码特征自动补全交易所前缀（用户只需输入数字代码）
-   */
-  function normalizeStockCode(input) {
-    const raw = String(input).trim();
-    if (!raw) return '';
-    const lower = raw.toLowerCase();
-    if (lower.startsWith('sh') || lower.startsWith('sz') || lower.startsWith('bj') || lower.startsWith('hk')) {
-      const prefix = lower.slice(0, 2);
-      const rest = raw.slice(2).replace(/\D/g, '');
-      return rest ? prefix + rest : raw;
-    }
-    const digits = raw.replace(/\D/g, '');
-    if (digits.length === 5) return 'hk' + digits;
-    if (digits.length === 6) {
-      const first = digits[0];
-      if (first === '6' || first === '9' || first === '5') return 'sh' + digits;
-      if (first === '0' || first === '1' || first === '2' || first === '3') return 'sz' + digits;
-      if (first === '4' || first === '8') return 'bj' + digits;
-    }
-    return raw;
-  }
-  
-  // 从 storage 读取股票列表
+  let stockNamesCache = {};
+
   async function loadStockList() {
     try {
       const result = await chrome.storage.local.get(['stockList']);
-      if (result.stockList && Array.isArray(result.stockList) && result.stockList.length > 0) {
+      if (Array.isArray(result.stockList) && result.stockList.length > 0) {
         stockList = result.stockList;
       } else {
         stockList = [DEFAULT_STOCK];
         await chrome.storage.local.set({ stockList });
       }
-      return stockList;
     } catch (err) {
-      console.error('读取失败:', err);
+      console.error('读取自选失败:', err);
       stockList = [DEFAULT_STOCK];
-      return stockList;
     }
+    return stockList;
   }
-  
-  // 保存股票列表到 storage
+
   async function saveStockList() {
-    try {
-      await chrome.storage.local.set({ stockList });
-      console.log('保存成功:', stockList);
-      return true;
-    } catch (err) {
-      console.error('保存失败:', err);
-      return false;
-    }
-  }
-  
-  // 初始化：无网时仅显示离线状态，不发起请求
-  async function init() {
-    await loadStockList();
-    renderSettings();
-    if (!navigator.onLine) {
-      showOfflineState();
-      return;
-    }
-    renderMonitor();
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') fetchData();
-    });
-    window.addEventListener('online', () => {
-      renderMonitor(); // 重连后完整渲染并启动定时器
-    });
-    window.addEventListener('offline', () => {
-      showOfflineState();
-    });
-  }
-  
-  // 获取股票数据（通过 background），带 3 秒超时
-  function fetchStock(code) {
-    const fetchPromise = new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: 'GET_STOCK', code }, (res) => {
-        if (chrome.runtime.lastError) {
-          resolve({ ok: false, error: chrome.runtime.lastError.message });
-          return;
-        }
-        resolve(res || { ok: false, error: '未知错误' });
-      });
-    });
-    const timeoutPromise = new Promise((resolve) => {
-      setTimeout(() => resolve({ ok: false, error: '请求超时' }), FETCH_TIMEOUT_MS);
-    });
-    return Promise.race([fetchPromise, timeoutPromise]);
-  }
-  
-  // HTML 转义
-  function escapeHtml(s) {
-    const div = document.createElement('div');
-    div.textContent = s;
-    return div.innerHTML;
-  }
-  
-  /**
-   * 创建一个股票行 DOM 元素（带占位符）
-   */
-  function createStockRow(code) {
-    const row = document.createElement('div');
-    row.className = 'stock-item';
-    row.id = 'row-' + code;
-    row.innerHTML = `
-      <span class="stock-name" id="name-${code}">加载中…</span>
-      <span class="stock-price" id="price-${code}">—</span>
-      <span class="stock-change" id="change-${code}">—</span>
-    `;
-    return row;
-  }
-  
-  /**
-   * 更新一个股票行的数据（无闪烁）。失败时保留旧数据并标为过时，无旧数据则显示「网络重连中…」
-   */
-  function updateStockRow(code, data) {
-    const nameEl = document.getElementById('name-' + code);
-    const priceEl = document.getElementById('price-' + code);
-    const changeEl = document.getElementById('change-' + code);
-    const rowEl = document.getElementById('row-' + code);
-
-    if (!nameEl || !priceEl || !changeEl || !rowEl) return;
-
-    if (!data || !data.ok) {
-      const cached = lastStockDataByCode[code];
-      if (cached) {
-        nameEl.textContent = cached.name || '—';
-        priceEl.textContent = cached.price || '—';
-        changeEl.textContent = cached.changeText || '—';
-        priceEl.className = 'stock-price ' + (cached.priceCls || '');
-        changeEl.className = 'stock-change ' + (cached.changeCls || '');
-        rowEl.className = 'stock-item stale';
-      } else {
-        nameEl.textContent = code;
-        priceEl.textContent = '';
-        changeEl.textContent = '网络重连中…';
-        rowEl.className = 'stock-item error';
-        priceEl.className = 'stock-price';
-        changeEl.className = 'stock-change';
-      }
-      return;
-    }
-
-    const name = data.name || '—';
-    const price = data.price || '—';
-    const n = parseFloat(data.changePct);
-    const cls = isNaN(n) ? '' : (n >= 0 ? 'up' : 'down');
-    const sign = isNaN(n) ? '' : (n >= 0 ? '+' : '');
-    const changeText = sign + (data.changePct || '—') + '%';
-    lastStockDataByCode[code] = { name, price, changeText, priceCls: cls, changeCls: cls };
-
-    rowEl.className = 'stock-item';
-    nameEl.textContent = name;
-    priceEl.textContent = price;
-    changeEl.textContent = changeText;
-    priceEl.className = 'stock-price ' + cls;
-    changeEl.className = 'stock-change ' + cls;
-  }
-  
-  /**
-   * 轮播用股票列表（剔除 sh000001，避免与标题栏重复）
-   */
-  function getRotateList() {
-    return stockList.filter(code => code !== MARKET_INDEX_CODE);
+    await chrome.storage.local.set({ stockList });
   }
 
-  /**
-   * 更新标题栏大盘指数（sh000001），失败时保留旧数据并显示过时/离线状态
-   */
-  async function updateMarketIndex() {
-    if (!marketIndexEl) return;
-    try {
-      const data = await fetchStock(MARKET_INDEX_CODE);
-      if (!data || !data.ok) {
-        if (lastMarketIndexData) {
-          marketIndexEl.innerHTML = `<span class="idx-value ${lastMarketIndexData.cls}">${lastMarketIndexData.price}</span><span class="idx-pct ${lastMarketIndexData.cls}">${lastMarketIndexData.pct}</span><span class="status-stale">数据可能过时</span>`;
-        } else {
-          marketIndexEl.innerHTML = '<span class="status-stale">网络重连中…</span>';
-        }
-        return;
-      }
-      const price = data.price || '—';
-      const n = parseFloat(data.changePct);
-      const cls = isNaN(n) ? 'neutral' : (n >= 0 ? 'up' : 'down');
-      const sign = isNaN(n) ? '' : (n >= 0 ? '+' : '');
-      const pct = isNaN(n) ? '—' : (sign + (data.changePct || '') + '%');
-      lastMarketIndexData = { price, pct, cls };
-      marketIndexEl.innerHTML = `<span class="idx-value ${cls}">${price}</span><span class="idx-pct ${cls}">${pct}</span>`;
-    } catch {
-      if (lastMarketIndexData) {
-        marketIndexEl.innerHTML = `<span class="idx-value ${lastMarketIndexData.cls}">${lastMarketIndexData.price}</span><span class="idx-pct ${lastMarketIndexData.cls}">${lastMarketIndexData.pct}</span><span class="status-stale">数据可能过时</span>`;
-      } else {
-        marketIndexEl.innerHTML = '<span class="status-stale">网络重连中…</span>';
-      }
-    }
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
-  /** 离线时标题栏显示 */
-  function showOfflineState() {
-    if (!marketIndexEl) return;
-    lastMarketIndexData = null;
-    marketIndexEl.innerHTML = '<span class="status-offline">离线</span>';
-    if (stockListEl) {
-      stockListEl.innerHTML = '<div class="stock-item empty">网络不可用</div>';
-    }
+  function getTradingSummary() {
+    const now = new Date();
+    const tradingCount = stockList.filter((code) => market.isInTradingTime(code, now)).length;
+    return {
+      total: stockList.length,
+      trading: tradingCount
+    };
   }
 
-  /**
-   * 仅拉取并刷新数据（不重建 DOM），用于智能唤醒、重连后立即刷新
-   */
-  async function fetchData() {
-    if (!navigator.onLine) return;
-    await updateMarketIndex();
-    if (currentDisplayCodes.length === 0) return;
-    const promises = currentDisplayCodes.map(code =>
-      fetchStock(code).then(data => ({ code, data }))
-    );
-    const results = await Promise.all(promises);
-    results.forEach(({ code, data }) => updateStockRow(code, data));
+  async function renderDebugInfo() {
+    const storage = await chrome.storage.local.get([BOSS_KEY_STORAGE, DISPLAY_MODE_STORAGE]);
+    const summary = getTradingSummary();
+    hiddenStateEl.textContent = storage[BOSS_KEY_STORAGE] ? '已隐藏' : '显示中';
+    tradingStateEl.textContent = `${summary.trading} / ${summary.total} 交易中`;
+    updateTimeEl.textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    summaryEl.textContent = summary.total > 0
+      ? `当前维护 ${summary.total} 只自选`
+      : '当前没有自选股票。';
   }
 
-  /**
-   * 渲染 Monitor 界面（无闪烁更新）
-   */
-  async function renderMonitor() {
-    const rotateList = getRotateList();
-    await updateMarketIndex();
-    if (rotateList.length === 0) {
-      stockListEl.innerHTML = '<div class="stock-item empty">暂无股票</div>';
-      currentDisplayCodes = [];
-      return;
-    }
-    
-    // 计算当前页要显示的股票（使用剔除后的列表）
-    const totalPages = Math.ceil(rotateList.length / MAX_DISPLAY);
-    const startIdx = currentPage * MAX_DISPLAY;
-    const endIdx = Math.min(startIdx + MAX_DISPLAY, rotateList.length);
-    const displayStocks = rotateList.slice(startIdx, endIdx);
-    
-    // 检查是否需要重建 DOM（换页或股票列表变化）
-    const needsRebuild = !arraysEqual(displayStocks, currentDisplayCodes);
-    
-    if (needsRebuild) {
-      // 需要重建 DOM 结构
-      stockListEl.innerHTML = '';
-      displayStocks.forEach(code => {
-        stockListEl.appendChild(createStockRow(code));
-      });
-      currentDisplayCodes = [...displayStocks];
-    }
-    
-    // 获取每个股票的数据并更新（不重建 DOM）
-    const promises = displayStocks.map(code => 
-      fetchStock(code).then(data => ({ code, data }))
-    );
-    
-    const results = await Promise.all(promises);
-    
-    // 只更新数据，不重建 DOM
-    results.forEach(({ code, data }) => {
-      updateStockRow(code, data);
-    });
-    
-    // 如果超过3个，启动轮播（按剔除后的数量）
-    if (rotateList.length > MAX_DISPLAY) {
-      if (rotateTimer) clearInterval(rotateTimer);
-      rotateTimer = setInterval(() => {
-        currentPage = (currentPage + 1) % totalPages;
-        renderMonitor(); // 每次轮播也会刷新大盘指数
-      }, ROTATE_INTERVAL);
-    } else {
-      if (rotateTimer) {
-        clearInterval(rotateTimer);
-        rotateTimer = null;
-      }
-      currentPage = 0;
-    }
-    if (!marketIndexTimer) {
-      marketIndexTimer = setInterval(updateMarketIndex, ROTATE_INTERVAL);
-    }
+  async function fetchStockNames() {
+    const codes = stockList.slice();
+    await Promise.all(codes.map(async (code) => {
+      if (stockNamesCache[code]) return;
+      try {
+        const data = await chrome.runtime.sendMessage({ type: 'GET_STOCK', code });
+        if (data && data.ok && data.name) stockNamesCache[code] = data.name;
+      } catch (_) { }
+    }));
   }
-  
-  /**
-   * 比较两个数组是否相等
-   */
-  function arraysEqual(a, b) {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (a[i] !== b[i]) return false;
-    }
-    return true;
-  }
-  
-  // 渲染 Settings 界面
-  function renderSettings() {
+
+  function renderStockList() {
     if (stockList.length === 0) {
-      settingsStockList.innerHTML = '<li class="empty-tip">暂无股票，请添加</li>';
+      stockListEl.innerHTML = '<li class="empty-tip">暂无股票，请添加</li>';
       return;
     }
-    settingsStockList.innerHTML = stockList.map((code, idx) => `
-      <li class="stock-list-item">
-        <span class="stock-code">${escapeHtml(code)}</span>
-        <button class="delete-btn" data-index="${idx}">删除</button>
-      </li>
-    `).join('');
-    
-    settingsStockList.querySelectorAll('.delete-btn').forEach(btn => {
+
+    const now = new Date();
+    stockListEl.innerHTML = stockList.map((code, idx) => {
+      const trading = market.isInTradingTime(code, now);
+      const name = stockNamesCache[code];
+      return `
+        <li class="stock-list-item">
+          <div class="stock-main">
+            <div class="stock-info">
+              ${name ? `<span class="stock-name">${escapeHtml(name)}</span>` : ''}
+              <span class="stock-code">${escapeHtml(code)}</span>
+            </div>
+            <span class="stock-state ${trading ? 'is-trading' : 'is-closed'}">${trading ? '交易中' : '休市'}</span>
+          </div>
+          <button class="delete-btn" data-index="${idx}">删除</button>
+        </li>
+      `;
+    }).join('');
+
+    stockListEl.querySelectorAll('.delete-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        const idx = parseInt(btn.dataset.index);
-        if (idx >= 0 && idx < stockList.length) {
-          stockList.splice(idx, 1);
-          if (stockList.length === 0) {
-            stockList = [DEFAULT_STOCK];
-          }
-          await saveStockList();
-          await loadStockList();
-          currentDisplayCodes = []; // 强制重建
-          renderSettings();
-          renderMonitor();
+        const idx = parseInt(btn.dataset.index, 10);
+        if (Number.isNaN(idx) || idx < 0 || idx >= stockList.length) return;
+        stockList.splice(idx, 1);
+        if (stockList.length === 0) {
+          stockList = [DEFAULT_STOCK];
         }
+        await saveStockList();
+        renderStockList();
+        await renderDebugInfo();
+        statusEl.textContent = '已更新自选列表';
       });
     });
   }
-  
-  // 添加股票
+
   async function addStock() {
     const raw = stockInput.value.trim();
     if (!raw) {
-      alert('请输入股票代码');
+      statusEl.textContent = '请输入股票代码';
       return;
     }
-    const code = normalizeStockCode(raw);
+
+    const code = shared.normalizeStockCode(raw);
     if (!code) {
-      alert('股票代码格式不正确');
+      statusEl.textContent = '股票代码格式不正确';
       stockInput.value = '';
       return;
     }
     if (stockList.includes(code)) {
-      alert('该股票已存在');
+      statusEl.textContent = '该股票已存在';
       stockInput.value = '';
       return;
     }
+
     stockList.push(code);
     stockInput.value = '';
+    await saveStockList();
+    renderStockList();
+    await renderDebugInfo();
+    statusEl.textContent = `已添加 ${code}`;
+  }
+
+  async function wakeCurrentTabFloat() {
+    statusEl.textContent = '正在唤醒当前页浮窗...';
     try {
-      const saved = await saveStockList();
-      if (saved) {
-        await loadStockList();
-        currentDisplayCodes = []; // 强制重建
-        renderSettings();
-      } else {
-        alert('保存失败，请重试');
+      const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      const tab = tabs && tabs[0];
+      if (!tab || !tab.id) {
+        statusEl.textContent = '未找到当前标签页';
+        return;
       }
+      if (!tab.url || (!tab.url.startsWith('http://') && !tab.url.startsWith('https://'))) {
+        statusEl.textContent = '当前页面不支持浮窗（请先切换到普通网页）';
+        return;
+      }
+      const res = await chrome.runtime.sendMessage({ type: 'SHOW_FLOAT_IN_TAB', tabId: tab.id });
+      statusEl.textContent = res && res.ok ? '当前页浮窗已唤醒' : '当前页浮窗唤醒失败';
     } catch (err) {
-      console.error('添加股票失败:', err);
-      alert('保存失败: ' + (err.message || '请重试'));
+      statusEl.textContent = '浮窗未就绪，请刷新目标页面后重试';
     }
   }
-  
-  // 切换到 Settings
-  function showSettings() {
-    monitorView.style.display = 'none';
-    settingsView.style.display = 'block';
-    if (rotateTimer) {
-      clearInterval(rotateTimer);
-      rotateTimer = null;
+
+  const digestSectionEl = document.getElementById('digest-section');
+  const digestTitleEl = document.getElementById('digest-title');
+  const digestCardsEl = document.getElementById('digest-cards');
+  const digestRefreshBtn = document.getElementById('digest-refresh-btn');
+
+  function getMarketPhase() {
+    const now = new Date();
+    const day = now.getDay();
+    const t = now.getHours() * 60 + now.getMinutes();
+    if (day === 0 || day === 6) return 'weekend';
+    if (t < 15 * 60) return 'pre-market';  // 9:30 前和交易时间都显示盘前预览
+    return 'post-market';
+  }
+
+  // ===== Digest 常量 =====
+  const OVERVIEW_US = ['usSPY', 'usQQQ', 'usDIA'];
+  const OVERVIEW_CN = ['usKWEB', 'usYINN', 'usBABA', 'hk00700'];
+  const INDEX_A = ['sh000001', 'sz399001', 'sz399006'];
+  const INDEX_EXT = ['hkHSI', 'usSPY', 'usQQQ'];
+  const MKTLABEL = {
+    usSPY: 'S&P500 (SPY)', usQQQ: '纳斯达克 (QQQ)', usDIA: '道琼斯 (DIA)',
+    usKWEB: '中概 (KWEB)', usYINN: '中国牛3X (YINN)', usBABA: '阿里 ADR',
+    hk00700: '腾讯 (港)', sh000001: '上证指数', sz399001: '深证成指',
+    sz399006: '创业板指', hkHSI: '恒生指数',
+  };
+
+  // ===== Digest DOM 工具 =====
+  function mkEl(tag, cls, text) {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text !== undefined) el.textContent = text;
+    return el;
+  }
+
+  function makeSection(label) {
+    const sec = mkEl('div', 'digest-sec');
+    if (label) sec.appendChild(mkEl('div', 'digest-sec-label', label));
+    const body = mkEl('div', 'digest-sec-body');
+    sec.appendChild(body);
+    return { sec, body };
+  }
+
+  function pctDir(pctStr) {
+    const n = parseFloat(pctStr);
+    return isNaN(n) ? 'flat' : n > 0 ? 'up' : n < 0 ? 'down' : 'flat';
+  }
+
+  function fmtPct(pctStr) {
+    const n = parseFloat(pctStr);
+    if (isNaN(n)) return pctStr || '—';
+    return (n > 0 ? '+' : '') + n.toFixed(2) + '%';
+  }
+
+  function makeMarketRow(label, data) {
+    const row = mkEl('div', 'digest-row');
+    row.appendChild(mkEl('span', 'digest-row-name', label));
+    const right = mkEl('div', 'digest-row-right');
+    if (!data || !data.ok) {
+      right.appendChild(mkEl('span', 'digest-row-price', '—'));
+      right.appendChild(mkEl('span', 'digest-row-pct flat', '—'));
+    } else {
+      right.appendChild(mkEl('span', 'digest-row-price', data.price));
+      right.appendChild(mkEl('span', `digest-row-pct ${pctDir(data.changePct)}`, fmtPct(data.changePct)));
     }
-    if (marketIndexTimer) {
-      clearInterval(marketIndexTimer);
-      marketIndexTimer = null;
+    row.appendChild(right);
+    return row;
+  }
+
+  function makeInfoRow(label, value) {
+    const row = mkEl('div', 'digest-row');
+    row.appendChild(mkEl('span', 'digest-row-name', label));
+    const right = mkEl('div', 'digest-row-right');
+    right.appendChild(mkEl('span', 'digest-row-price', value || '—'));
+    row.appendChild(right);
+    return row;
+  }
+
+  function makeGroupCard(groupTitle, codes, dataMap) {
+    const card = mkEl('div', 'digest-group-card');
+    if (groupTitle) card.appendChild(mkEl('div', 'digest-group-title', groupTitle));
+    for (const code of codes) {
+      card.appendChild(makeMarketRow(MKTLABEL[code] || code, dataMap[code]));
+    }
+    return card;
+  }
+
+  function makeReviewCard(name, data) {
+    const card = mkEl('div', 'digest-review-card');
+    const header = mkEl('div', 'digest-review-header');
+    header.appendChild(mkEl('span', 'digest-review-name', name));
+    if (data && data.ok) {
+      header.appendChild(mkEl('span', `digest-row-pct ${pctDir(data.changePct)}`, fmtPct(data.changePct)));
+    }
+    card.appendChild(header);
+    if (data && data.ok) {
+      const stats = mkEl('div', 'digest-review-stats');
+      const fields = [['收', data.price], ['高', data.high], ['低', data.low]];
+      if (data.turnoverRate && data.turnoverRate !== '—') fields.push(['换手', data.turnoverRate + '%']);
+      for (const [lbl, val] of fields) {
+        const item = mkEl('span', 'digest-stat-item');
+        item.appendChild(mkEl('span', 'digest-stat-label', lbl));
+        item.appendChild(document.createTextNode(val || '—'));
+        stats.appendChild(item);
+      }
+      card.appendChild(stats);
+    }
+    return card;
+  }
+
+  function formatMoney(value) {
+    const n = parseFloat(value);
+    if (isNaN(n) || n === 0) return '—';
+    const abs = Math.abs(n);
+    const sign = n > 0 ? '+' : (n < 0 ? '-' : '');
+    if (abs >= 1e8) return sign + (abs / 1e8).toFixed(2) + '亿';
+    if (abs >= 1e4) return sign + (abs / 1e4).toFixed(2) + '万';
+    return sign + abs.toFixed(0);
+  }
+
+  function renderSimpleList(body, items, emptyText) {
+    body.innerHTML = '';
+    if (!Array.isArray(items) || items.length === 0) {
+      body.appendChild(mkEl('div', 'digest-loading', emptyText || '暂无数据'));
+      return;
+    }
+    const ul = mkEl('ul', 'digest-news-list');
+    items.slice(0, 5).forEach((item) => {
+      const text = typeof item === 'string' ? item : (item.title || item.text || '');
+      if (!text) return;
+      ul.appendChild(mkEl('li', '', text));
+    });
+    body.appendChild(ul);
+  }
+
+  function formatFlowValue(value) {
+    const n = parseFloat(value);
+    if (isNaN(n) || n === 0) return '—';
+    const abs = Math.abs(n);
+    const sign = n > 0 ? '+' : (n < 0 ? '-' : '');
+    if (abs >= 1e8) return sign + (abs / 1e8).toFixed(2) + '亿';
+    if (abs >= 1e4) return sign + (abs / 1e4).toFixed(2) + '万';
+    return sign + abs.toFixed(0);
+  }
+
+  function renderTileGrid(body, items, emptyText) {
+    if (!Array.isArray(items) || items.length === 0) {
+      body.appendChild(mkEl('div', 'digest-loading', emptyText || '暂无数据'));
+      return;
+    }
+    const grid = mkEl('div', 'digest-tiles');
+    items.slice(0, 7).forEach((item) => {
+      const name = item.name || item.title || '—';
+      const pct = typeof item.changePct === 'number' ? item.changePct : parseFloat(item.changePct);
+      const netIn = typeof item.mainNetIn === 'number' ? item.mainNetIn : parseFloat(item.mainNetIn);
+      const dir = (!isNaN(pct) ? pct : netIn) >= 0 ? 'up' : 'down';
+      const tile = mkEl('div', `digest-tile ${dir}`);
+      tile.appendChild(mkEl('div', 'digest-tile-name', name));
+      tile.appendChild(mkEl('div', 'digest-tile-value', formatFlowValue(netIn)));
+      tile.appendChild(mkEl('div', 'digest-tile-pct', fmtPct(pct)));
+      grid.appendChild(tile);
+    });
+    body.appendChild(grid);
+  }
+
+  async function fetchDigestData(phase, force = false) {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: 'GET_DIGEST_DATA', phase, force });
+      return res && res.ok ? res.data : null;
+    } catch (_) { return null; }
+  }
+
+  // ===== Digest 数据获取 =====
+  async function fetchBatch(codes) {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: 'GET_STOCKS_BATCH', codes });
+      if (!res || !res.ok || !Array.isArray(res.results)) return {};
+      const map = {};
+      for (const item of res.results) {
+        map[item.rawCode] = item;
+        if (item.rawCode && item.ok && item.name && item.name !== '—') {
+          stockNamesCache[item.rawCode] = item.name;
+        }
+      }
+      return map;
+    } catch (_) { return {}; }
+  }
+
+  async function fetchCNH() {
+    try { return await chrome.runtime.sendMessage({ type: 'GET_CNH_RATE' }); }
+    catch (_) { return null; }
+  }
+
+  // ===== 开盘前速览 =====
+  async function renderPreMarket(container) {
+    container.innerHTML = '';
+    const digestPromise = fetchDigestData('pre-market');
+
+    // 1. 外盘行情
+    const { sec: mktSec, body: mktBody } = makeSection('外盘行情');
+    mktBody.appendChild(mkEl('div', 'digest-loading', '行情数据加载中…'));
+    container.appendChild(mktSec);
+
+    const PRE_US_LABELS = { SPX: 'S&P 500', IXIC: '纳斯达克', DJI: '道琼斯' };
+    const [cnData, cnh, usIxPre] = await Promise.all([
+      fetchBatch(OVERVIEW_CN),
+      fetchCNH(),
+      chrome.runtime.sendMessage({ type: 'GET_US_INDICES' }).catch(() => null),
+    ]);
+
+    mktBody.innerHTML = '';
+    if (usIxPre && usIxPre.ok && usIxPre.indices) {
+      const usCard = mkEl('div', 'digest-group-card');
+      usCard.appendChild(mkEl('div', 'digest-group-title', '美股三大指数'));
+      ['SPX', 'IXIC', 'DJI'].forEach((k) => {
+        usCard.appendChild(makeMarketRow(PRE_US_LABELS[k], usIxPre.indices[k]));
+      });
+      mktBody.appendChild(usCard);
+    } else {
+      const fallback = await fetchBatch(OVERVIEW_US);
+      mktBody.appendChild(makeGroupCard('美股指数(ETF)', OVERVIEW_US, fallback));
+    }
+    mktBody.appendChild(makeGroupCard('中概 / 港股', OVERVIEW_CN, cnData));
+
+    if (cnh && cnh.ok && cnh.rate) {
+      const cnhRow = mkEl('div', 'digest-cnh-row');
+      cnhRow.appendChild(mkEl('span', '', '离岸人民币'));
+      cnhRow.appendChild(mkEl('span', 'digest-cnh-rate', `USD/CNH  ${parseFloat(cnh.rate).toFixed(4)}`));
+      mktBody.appendChild(cnhRow);
+    }
+
+    // 2. 自选美股盘前（如有）
+    const usStocks = stockList.filter((c) => c.startsWith('us'));
+    if (usStocks.length > 0) {
+      const { sec, body } = makeSection('自选美股盘前');
+      const usMap = await fetchBatch(usStocks);
+      usStocks.forEach((code) => {
+        const name = stockNamesCache[code] || (usMap[code] && usMap[code].name) || code;
+        body.appendChild(makeMarketRow(name, usMap[code]));
+      });
+      container.appendChild(sec);
+    }
+
+    // 3. 今日大事（财经日历）
+    const { sec: calSec, body: calBody } = makeSection('今日大事（财经日历）');
+    calBody.appendChild(mkEl('div', 'digest-loading', '加载中…'));
+    container.appendChild(calSec);
+
+    // 4. 财报预告
+    const { sec: earnSec, body: earnBody } = makeSection('财报预告');
+    earnBody.appendChild(mkEl('div', 'digest-loading', '加载中…'));
+    container.appendChild(earnSec);
+
+    // 5. 隔夜重大新闻（异步）
+    const { sec: newsSec, body: newsBody } = makeSection('隔夜重大新闻');
+    newsBody.appendChild(mkEl('div', 'digest-loading', '加载中…'));
+    container.appendChild(newsSec);
+
+    digestPromise.then((digest) => {
+      renderSimpleList(calBody, digest && digest.calendar, '暂无日历数据');
+      renderSimpleList(earnBody, digest && digest.earnings, '暂无财报预告');
+      const overnight = digest && Array.isArray(digest.overnight) ? digest.overnight : [];
+      if (overnight.length > 0) {
+        renderSimpleList(newsBody, overnight, '暂无重大新闻');
+        return;
+      }
+      chrome.runtime.sendMessage({
+        type: 'GET_MARKET_NEWS',
+        queries: ['美股 道琼斯 纳斯达克 when:3d', 'A股 板块 宏观政策 when:3d'],
+      }).then((res) => {
+        newsBody.innerHTML = '';
+        const items = res && res.ok && Array.isArray(res.headlines) ? res.headlines : [];
+        if (!items.length) { newsBody.appendChild(mkEl('div', 'digest-loading', '暂无近期新闻')); return; }
+        const ul = mkEl('ul', 'digest-news-list');
+        items.slice(0, 3).forEach((h) => ul.appendChild(mkEl('li', '', h.title || '')));
+        newsBody.appendChild(ul);
+      }).catch(() => { newsBody.innerHTML = ''; newsBody.appendChild(mkEl('div', 'digest-loading', '新闻加载失败')); });
+    }).catch(() => {
+      renderSimpleList(calBody, [], '日历加载失败');
+      renderSimpleList(earnBody, [], '财报加载失败');
+      renderSimpleList(newsBody, [], '新闻加载失败');
+    });
+  }
+
+  // ===== 盘后总结 =====
+  async function renderPostMarket(container) {
+    container.innerHTML = '';
+    const digestPromise = fetchDigestData('post-market');
+
+    // 1. 大盘收盘
+    const { sec: idxSec, body: idxBody } = makeSection('大盘收盘');
+    idxBody.appendChild(mkEl('div', 'digest-loading', '数据加载中…'));
+    container.appendChild(idxSec);
+
+    // 2. 自选股复盘
+    const { sec: stkSec, body: stkBody } = makeSection('自选股复盘');
+    stkBody.appendChild(mkEl('div', 'digest-loading', '数据加载中…'));
+    container.appendChild(stkSec);
+
+    const list = stockList.length > 0 ? stockList : [DEFAULT_STOCK];
+    const US_IX_LABELS = { SPX: 'S&P 500', IXIC: '纳斯达克', DJI: '道琼斯' };
+    const [idxMap, stkMap, usIx] = await Promise.all([
+      fetchBatch([...INDEX_A, 'hkHSI']),
+      fetchBatch(list),
+      chrome.runtime.sendMessage({ type: 'GET_US_INDICES' }).catch(() => null),
+    ]);
+
+    idxBody.innerHTML = '';
+    idxBody.appendChild(makeGroupCard('A股', INDEX_A, idxMap));
+    idxBody.appendChild(makeGroupCard('港股', ['hkHSI'], idxMap));
+    if (usIx && usIx.ok && usIx.indices) {
+      const usCard = mkEl('div', 'digest-group-card');
+      usCard.appendChild(mkEl('div', 'digest-group-title', '美股指数'));
+      ['SPX', 'IXIC', 'DJI'].forEach((k) => {
+        usCard.appendChild(makeMarketRow(US_IX_LABELS[k], usIx.indices[k]));
+      });
+      idxBody.appendChild(usCard);
+    }
+
+    stkBody.innerHTML = '';
+    for (const code of list) {
+      const name = stockNamesCache[code] || (stkMap[code] && stkMap[code].name) || code;
+      stkBody.appendChild(makeReviewCard(name, stkMap[code]));
+    }
+
+    // 3. 今日新闻（异步）
+    const { sec: newsSec, body: newsBody } = makeSection('今日新闻');
+    newsBody.appendChild(mkEl('div', 'digest-loading', '加载中…'));
+    container.appendChild(newsSec);
+
+    Promise.all(
+      list.map((code) => chrome.runtime.sendMessage({
+        type: 'GET_AI_STOCK_SUMMARY', code, name: stockNamesCache[code] || code,
+      }).catch(() => null))
+    ).then((results) => {
+      newsBody.innerHTML = '';
+      let any = false;
+      for (let i = 0; i < list.length; i++) {
+        const res = results[i];
+        if (!res || !res.ok || !Array.isArray(res.headlines) || !res.headlines.length) continue;
+        any = true;
+        newsBody.appendChild(mkEl('div', 'digest-news-stock-name', stockNamesCache[list[i]] || list[i]));
+        const ul = mkEl('ul', 'digest-news-list');
+        res.headlines.forEach((h) => ul.appendChild(mkEl('li', '', h.title || '')));
+        newsBody.appendChild(ul);
+      }
+      if (!any) newsBody.appendChild(mkEl('div', 'digest-loading', '暂无近期新闻'));
+    });
+
+    // 4. 资金动向
+    const { sec: flowSec, body: flowBody } = makeSection('资金动向');
+    flowBody.appendChild(mkEl('div', 'digest-loading', '加载中…'));
+    container.appendChild(flowSec);
+
+    // 5. 行业 / 概念热度
+    const { sec: sectorSec, body: sectorBody } = makeSection('行业 / 概念热度');
+    sectorBody.appendChild(mkEl('div', 'digest-loading', '加载中…'));
+    container.appendChild(sectorSec);
+
+    // 6. 美股 11 大板块
+    const { sec: usSec, body: usBody } = makeSection('美股板块表现');
+    usBody.appendChild(mkEl('div', 'digest-loading', '加载中…'));
+    container.appendChild(usSec);
+
+    digestPromise.then(async (digest) => {
+      flowBody.innerHTML = '';
+      const flow = digest && digest.fundFlow && digest.fundFlow.ok ? digest.fundFlow : null;
+      if (flow && (flow.sh || flow.sz)) {
+        const rows = mkEl('div', 'digest-flow-list');
+        if (flow.sh) {
+          rows.appendChild(makeInfoRow('上证主力净流入', `${formatMoney(flow.sh.mainNetIn)}（${flow.sh.mainRatio || 0}%）`));
+          rows.appendChild(makeInfoRow('上证超大单净流入', `${formatMoney(flow.sh.superNetIn)}（${flow.sh.superRatio || 0}%）`));
+        }
+        if (flow.sz) {
+          rows.appendChild(makeInfoRow('深证主力净流入', `${formatMoney(flow.sz.mainNetIn)}（${flow.sz.mainRatio || 0}%）`));
+          rows.appendChild(makeInfoRow('深证超大单净流入', `${formatMoney(flow.sz.superNetIn)}（${flow.sz.superRatio || 0}%）`));
+        }
+        flowBody.appendChild(rows);
+      } else {
+        flowBody.appendChild(mkEl('div', 'digest-loading', '暂无资金流向数据'));
+      }
+
+      sectorBody.innerHTML = '';
+      const sectorRes = await chrome.runtime.sendMessage({ type: 'GET_SECTOR_HOT' }).catch(() => null);
+      if (sectorRes && sectorRes.ok) {
+        const makeHeatCard = (title, items, dir) => {
+          const card = mkEl('div', 'digest-group-card');
+          card.appendChild(mkEl('div', 'digest-group-title', title));
+          (items || []).forEach((s) => {
+            const row = mkEl('div', 'digest-row');
+            row.appendChild(mkEl('span', 'digest-row-name', s.name));
+            const right = mkEl('div', 'digest-row-right');
+            right.appendChild(mkEl('span', `digest-row-pct ${dir}`, fmtPct(s.changePct)));
+            row.appendChild(right);
+            card.appendChild(row);
+          });
+          return card;
+        };
+        if (sectorRes.top && sectorRes.top.length) sectorBody.appendChild(makeHeatCard('涨幅前三', sectorRes.top, 'up'));
+        if (sectorRes.bottom && sectorRes.bottom.length) sectorBody.appendChild(makeHeatCard('跌幅前三', sectorRes.bottom, 'down'));
+        if (!sectorRes.top?.length && !sectorRes.bottom?.length) {
+          sectorBody.appendChild(mkEl('div', 'digest-loading', '暂无板块热度数据'));
+        }
+      } else {
+        sectorBody.appendChild(mkEl('div', 'digest-loading', '板块数据加载失败'));
+      }
+      renderSimpleList(usBody, [], '美股板块暂不支持');
+    }).catch(() => {
+      flowBody.innerHTML = '';
+      flowBody.appendChild(mkEl('div', 'digest-loading', '资金流向加载失败'));
+      renderSimpleList(sectorBody, [], '行业热度加载失败');
+      renderSimpleList(usBody, [], '美股板块加载失败');
+    });
+  }
+
+  // ===== 主入口 =====
+  async function loadDigest(phase) {
+    if (!digestSectionEl) return;
+    digestSectionEl.style.display = '';
+    digestTitleEl.textContent = phase === 'post-market' ? '盘后总结' : '开盘前速览';
+    digestCardsEl.innerHTML = '';
+    if (phase === 'post-market') {
+      await renderPostMarket(digestCardsEl);
+    } else {
+      await renderPreMarket(digestCardsEl);
     }
   }
-  
-  // 切换到 Monitor
-  async function showMonitor() {
-    settingsView.style.display = 'none';
-    monitorView.style.display = 'block';
+
+  function bindDigestRefresh(phase) {
+    if (!digestRefreshBtn) return;
+    let refreshing = false;
+    digestRefreshBtn.addEventListener('click', async () => {
+      if (refreshing) return;
+      refreshing = true;
+      digestRefreshBtn.classList.add('spinning');
+      try { await loadDigest(phase); } finally {
+        setTimeout(() => { digestRefreshBtn.classList.remove('spinning'); refreshing = false; }, 800);
+      }
+    });
+  }
+
+  let currentDigestPhase = null;
+  let digestRefreshTimer = null;
+
+  async function startDigestAutoRefresh() {
+    const phase = getMarketPhase();
+    if (phase === 'weekend') {
+      if (digestRefreshTimer) {
+        clearInterval(digestRefreshTimer);
+        digestRefreshTimer = null;
+      }
+      currentDigestPhase = null;
+      return;
+    }
+    if (currentDigestPhase !== phase) {
+      currentDigestPhase = phase;
+      await loadDigest(phase);
+      bindDigestRefresh(phase);
+    }
+    if (!digestRefreshTimer) {
+      digestRefreshTimer = setInterval(async () => {
+        const newPhase = getMarketPhase();
+        if (newPhase === 'weekend') {
+          clearInterval(digestRefreshTimer);
+          digestRefreshTimer = null;
+          currentDigestPhase = null;
+          return;
+        }
+        if (newPhase !== currentDigestPhase) {
+          currentDigestPhase = newPhase;
+          await loadDigest(newPhase);
+          bindDigestRefresh(newPhase);
+        } else {
+          await loadDigest(newPhase).catch(() => {});
+        }
+      }, 30 * 1000);  // 每 30 秒刷新一次
+    }
+  }
+
+  async function init() {
     await loadStockList();
-    currentPage = 0;
-    currentDisplayCodes = []; // 强制重建
-    if (marketIndexTimer) clearInterval(marketIndexTimer);
-    marketIndexTimer = null;
-    renderMonitor();
+    fetchStockNames().then(() => renderStockList()); // 异步加载名称后刷新列表
+    renderStockList(); // 先渲染一次（无名称）
+    await renderDebugInfo();
+    statusEl.textContent = '网页浮窗负责监控，当前面板仅做设置和状态查看';
+    await startDigestAutoRefresh();
   }
-  
-  // 事件绑定
-  settingsBtn.addEventListener('click', showSettings);
-  backBtn.addEventListener('click', showMonitor);
+
+  wakeBtn.addEventListener('click', wakeCurrentTabFloat);
   addBtn.addEventListener('click', addStock);
   stockInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      addStock();
+    if (e.key === 'Enter') addStock();
+  });
+
+  chrome.storage.onChanged.addListener(async (changes, areaName) => {
+    if (areaName !== 'local') return;
+    if (changes.stockList) {
+      await loadStockList();
+      await fetchStockNames();
+      renderStockList();
+    }
+    if (changes.stockList || changes[BOSS_KEY_STORAGE] || changes[DISPLAY_MODE_STORAGE]) {
+      await renderDebugInfo();
     }
   });
-  
-  // 初始化
+
   init();
 })();

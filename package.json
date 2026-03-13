@@ -1,0 +1,15 @@
+{
+  "name": "moyu-kan-pan-tests",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:unit": "node test_runner.js",
+    "test:popup": "playwright test --project=popup",
+    "test:extension": "playwright test --project=extension",
+    "test:e2e": "playwright test",
+    "test": "node test_runner.js && playwright test --project=popup"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0"
+  }
+}

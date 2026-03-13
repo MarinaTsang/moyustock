@@ -1,254 +1,652 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<!-- Popup 页面：扩展的弹窗 UI（监控 + 设置）。由 popup.js 驱动，与 content 浮窗共享 chrome.storage.local 的 stockList。 -->
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>股票行情</title>
+  <title>股票设置</title>
   <style>
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
+
+    :root {
+      --bg: #f3efe7;
+      --panel: rgba(255, 255, 255, 0.88);
+      --panel-strong: #ffffff;
+      --text: #1f2a22;
+      --muted: #66756a;
+      --border: rgba(31, 42, 34, 0.1);
+      --accent: #1f6f5f;
+      --accent-soft: rgba(31, 111, 95, 0.12);
+      --danger: #c5523f;
+      --danger-soft: rgba(197, 82, 63, 0.12);
+      --shadow: 0 10px 30px rgba(37, 43, 39, 0.12);
+    }
+
     body {
-      width: 280px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      width: 320px;
+      min-height: 420px;
+      padding: 14px;
+      font-family: "PingFang SC", "SF Pro Text", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(31, 111, 95, 0.18), transparent 42%),
+        linear-gradient(160deg, #f7f3eb 0%, #ece5d8 100%);
+    }
+
+    .shell {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      overflow: hidden;
+    }
+
+    .hero {
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(160deg, rgba(31, 111, 95, 0.12), rgba(255, 255, 255, 0.2));
+    }
+
+    .hero h1 {
+      font-size: 16px;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+
+    .hero p {
       font-size: 12px;
-      background: #f5f5f5;
-      color: #333;
+      line-height: 1.5;
+      color: var(--muted);
     }
-    
-    /* Monitor View */
-    #monitor-view {
-      padding: 0;
-      min-height: 60px;
+
+    .hero-actions {
+      margin-top: 12px;
     }
-    .monitor-header {
+
+    .section {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section:last-child {
+      border-bottom: none;
+    }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+
+    .summary {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text);
+    }
+
+    .status {
+      margin-top: 8px;
+      min-height: 18px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .action-btn,
+    .add-btn,
+    .delete-btn {
+      border: none;
+      cursor: pointer;
+      transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+    }
+
+    .action-btn:hover,
+    .add-btn:hover,
+    .delete-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .action-btn {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .input-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .stock-input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel-strong);
+      color: var(--text);
+      font-size: 12px;
+      outline: none;
+    }
+
+    .stock-input:focus {
+      border-color: rgba(31, 111, 95, 0.38);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .add-btn {
+      padding: 0 14px;
+      border-radius: 12px;
+      background: rgba(31, 111, 95, 0.9);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .stock-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .stock-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid rgba(31, 42, 34, 0.08);
+    }
+
+    .stock-main {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stock-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stock-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+    }
+
+    .stock-code {
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--muted);
+      line-height: 1.2;
+    }
+
+    .stock-state {
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .stock-state.is-trading {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .stock-state.is-closed {
+      background: rgba(102, 117, 106, 0.12);
+      color: var(--muted);
+    }
+
+    .delete-btn {
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: var(--danger-soft);
+      color: var(--danger);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .meta-card {
+      padding: 10px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(31, 42, 34, 0.08);
+    }
+
+    .meta-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .meta-value {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .tips {
+      margin-top: 10px;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+
+    .config-grid {
+      display: grid;
+      gap: 8px;
+    }
+
+    .field-label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .field-input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel-strong);
+      color: var(--text);
+      font-size: 12px;
+      outline: none;
+    }
+
+    .field-input:focus {
+      border-color: rgba(31, 111, 95, 0.38);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .save-btn {
+      border: none;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #1f2a22;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .empty-tip {
+      padding: 18px 10px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.65);
+      border-radius: 14px;
+      border: 1px dashed rgba(31, 42, 34, 0.12);
+    }
+
+    .section-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .section-title-row .section-title {
+      margin-bottom: 0;
+    }
+
+    .refresh-btn {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 6px;
+      line-height: 1;
+      transition: color 0.15s ease, transform 0.3s ease;
+    }
+
+    .refresh-btn:hover {
+      color: var(--accent);
+    }
+
+    .refresh-btn.spinning {
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ===== Digest 通用 ===== */
+    .digest-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .digest-sec {}
+
+    .digest-sec-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    /* 分组卡片（外盘行情/大盘收盘内的子组）*/
+    .digest-group-card {
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(31, 42, 34, 0.07);
+      border-radius: 12px;
+      padding: 6px 10px;
+      margin-bottom: 6px;
+    }
+
+    .digest-group-title {
+      font-size: 10px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      padding-bottom: 3px;
+      border-bottom: 1px solid rgba(31, 42, 34, 0.06);
+    }
+
+    /* 单行：名称 + 价格 + 涨跌幅 */
+    .digest-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(31, 42, 34, 0.04);
+    }
+
+    .digest-row:last-child {
+      border-bottom: none;
+    }
+
+    .digest-row-name {
+      font-size: 11px;
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+    }
+
+    .digest-row-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .digest-row-price {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+      min-width: 52px;
+      text-align: right;
+    }
+
+    .digest-row-pct {
+      font-size: 11px;
+      font-weight: 700;
+      min-width: 52px;
+      text-align: right;
+    }
+
+    .digest-row-pct.up {
+      color: var(--danger);
+    }
+
+    .digest-row-pct.down {
+      color: #1f6f5f;
+    }
+
+    .digest-row-pct.flat {
+      color: var(--muted);
+    }
+
+    /* 离岸人民币行 */
+    .digest-cnh-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 6px 10px;
-      border-bottom: 1px solid #e8e8e8;
-      background: #fafafa;
-      flex-shrink: 0;
-    }
-    .market-index {
-      font-size: 12px;
-      flex: 1;
-      min-width: 0;
-      text-align: left;
-    }
-    .market-index .idx-value {
-      font-weight: 600;
-      margin-right: 4px;
-    }
-    .market-index .idx-pct {
+      margin-top: 2px;
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(31, 42, 34, 0.07);
+      border-radius: 10px;
       font-size: 11px;
-      font-weight: 500;
+      color: var(--muted);
     }
-    .market-index .idx-value.up,
-    .market-index .idx-pct.up { color: #c0392b; }
-    .market-index .idx-value.down,
-    .market-index .idx-pct.down { color: #27ae60; }
-    .market-index .idx-value.neutral,
-    .market-index .idx-pct.neutral { color: #666; }
-    .market-index .status-stale { color: #999; font-size: 11px; margin-left: 6px; font-weight: normal; }
-    .market-index .status-offline { color: #e74c3c; font-size: 11px; margin-left: 6px; font-weight: normal; }
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 2px;
+
+    .digest-cnh-rate {
+      font-weight: 700;
+      color: var(--text);
     }
-    .header-btn {
-      width: 24px;
-      height: 24px;
-      padding: 0;
-      border: none;
-      background: transparent;
-      cursor: pointer;
-      font-size: 14px;
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+
+    /* 自选股复盘卡片 */
+    .digest-review-card {
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid rgba(31, 42, 34, 0.08);
+      border-radius: 12px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
     }
-    .header-btn:hover {
-      background: #eee;
-    }
-    #monitor-view #stock-list {
-      padding: 10px;
-    }
-    #monitor-view .stock-item {
+
+    .digest-review-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 6px 8px;
-      margin-bottom: 4px;
-      background: #fff;
-      border-radius: 4px;
-      border: 1px solid #e0e0e0;
+      margin-bottom: 5px;
     }
-    #monitor-view .stock-item:last-child {
-      margin-bottom: 0;
-    }
-    #monitor-view .stock-name {
-      font-weight: 500;
-      color: #333;
-      flex: 1;
-      margin-right: 8px;
-    }
-    #monitor-view .stock-price {
-      font-weight: 600;
-      margin-right: 8px;
-      min-width: 60px;
-      text-align: right;
-    }
-    #monitor-view .stock-change {
-      font-weight: 500;
-      min-width: 50px;
-      text-align: right;
-    }
-    #monitor-view .stock-price.up,
-    #monitor-view .stock-change.up {
-      color: #c0392b;
-    }
-    #monitor-view .stock-price.down,
-    #monitor-view .stock-change.down {
-      color: #27ae60;
-    }
-    #monitor-view .stock-item.loading {
-      color: #999;
-      font-size: 11px;
-    }
-    #monitor-view .stock-item.error {
-      color: #e74c3c;
-      font-size: 11px;
-    }
-    #monitor-view .stock-item.stale .stock-change {
-      color: #999;
-    }
-    #monitor-view {
-      position: relative;
-    }
-    
-    /* Settings View */
-    #settings-view {
-      padding: 10px;
-    }
-    #settings-view .header {
-      display: flex;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-    #settings-view .back-btn {
-      margin-right: 8px;
-      padding: 4px 8px;
-      font-size: 11px;
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      cursor: pointer;
-      color: #666;
-    }
-    #settings-view .back-btn:hover {
-      background: #f0f0f0;
-    }
-    #settings-view .title {
-      font-weight: 600;
-      font-size: 13px;
-    }
-    #settings-view .input-group {
-      display: flex;
-      margin-bottom: 12px;
-      gap: 6px;
-    }
-    #settings-view .stock-input {
-      flex: 1;
-      padding: 6px 8px;
+
+    .digest-review-name {
       font-size: 12px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      background: #fff;
+      font-weight: 700;
+      color: var(--text);
     }
-    #settings-view .add-btn {
-      padding: 6px 12px;
-      font-size: 12px;
-      background: #4a90e2;
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
+
+    .digest-review-stats {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
     }
-    #settings-view .add-btn:hover {
-      background: #357abd;
+
+    .digest-stat-item {
+      font-size: 11px;
+      color: var(--text);
     }
-    #settings-view .stock-list {
+
+    .digest-stat-label {
+      font-size: 10px;
+      color: var(--muted);
+      margin-right: 2px;
+    }
+
+    /* 新闻列表 */
+    .digest-news-list {
       list-style: none;
+      padding: 0;
+      margin: 0;
     }
-    #settings-view .stock-list-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 6px 8px;
-      margin-bottom: 4px;
-      background: #fff;
-      border-radius: 4px;
-      border: 1px solid #e0e0e0;
-    }
-    #settings-view .stock-list-item:last-child {
-      margin-bottom: 0;
-    }
-    #settings-view .stock-code {
-      flex: 1;
-      font-size: 12px;
-      color: #333;
-    }
-    #settings-view .delete-btn {
-      padding: 2px 8px;
+
+    .digest-news-list li {
       font-size: 11px;
-      background: #e74c3c;
+      line-height: 1.5;
+      color: var(--text);
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(31, 42, 34, 0.05);
+    }
+
+    .digest-news-list li:last-child {
+      border-bottom: none;
+    }
+
+    .digest-news-list li::before {
+      content: "• ";
+      color: var(--muted);
+    }
+
+    .digest-news-stock-name {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin: 6px 0 2px;
+    }
+
+    .digest-sub-label {
+      margin: 8px 0 6px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .digest-tiles {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .digest-tile {
+      min-height: 70px;
+      padding: 8px 10px;
+      border-radius: 12px;
       color: #fff;
-      border: none;
-      border-radius: 3px;
-      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
     }
-    #settings-view .delete-btn:hover {
-      background: #c0392b;
+
+    .digest-tile.up {
+      background: linear-gradient(135deg, #f2582f, #e64521);
     }
-    #settings-view .empty-tip {
-      text-align: center;
-      color: #999;
+
+    .digest-tile.down {
+      background: linear-gradient(135deg, #2bb673, #1f9c5f);
+    }
+
+    .digest-tile-name {
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.2;
+      max-height: 2.4em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .digest-tile-value {
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .digest-tile-pct {
       font-size: 11px;
-      padding: 20px 0;
+      opacity: 0.9;
+      line-height: 1.2;
+    }
+
+    .digest-loading {
+      font-size: 11px;
+      color: var(--muted);
+      font-style: italic;
+      padding: 4px 0;
     }
   </style>
 </head>
+
 <body>
-  <!-- Monitor View -->
-  <div id="monitor-view">
-    <div class="monitor-header">
-      <div id="market-index" class="market-index"></div>
-      <div class="header-actions">
-        <button class="header-btn" id="settings-btn" title="设置">⚙️</button>
+  <div class="shell">
+    <section class="hero">
+      <h1>股票插件设置</h1>
+      <p>监控主入口在网页右下角浮窗。这里仅保留自选管理、状态速览和当前页唤醒。</p>
+      <div class="hero-actions">
+        <button class="action-btn" id="wake-float-btn" type="button">唤醒当前页浮窗</button>
       </div>
-    </div>
-    <div id="stock-list"></div>
+      <div class="tips" style="margin-top:10px">
+        老板键：<code>Alt + Q</code><br>
+        调试面板：<code>Alt + Shift + D</code>
+      </div>
+      <div class="status" id="status-text"></div>
+    </section>
+
+    <section class="section" id="digest-section" style="display:none">
+      <div class="section-title-row">
+        <div class="section-title" id="digest-title">开盘前速览</div>
+        <button class="refresh-btn" id="digest-refresh-btn" title="刷新">↻</button>
+      </div>
+      <div class="digest-cards" id="digest-cards"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">自选管理</div>
+      <div class="input-row">
+        <input id="stock-input" class="stock-input" type="text" placeholder="输入代码，如 600519 / TSLA">
+        <button id="add-btn" class="add-btn" type="button">添加</button>
+      </div>
+      <p class="summary" id="summary-text"></p>
+      <ul class="stock-list" id="stock-list"></ul>
+    </section>
+
+    <section class="section">
+      <div class="section-title">状态速览</div>
+      <div class="meta-grid">
+        <div class="meta-card">
+          <div class="meta-label">浮窗</div>
+          <div class="meta-value" id="hidden-state">-</div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-label">交易中</div>
+          <div class="meta-value" id="trading-state">-</div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-label">更新时间</div>
+          <div class="meta-value" id="update-time">-</div>
+        </div>
+      </div>
+    </section>
+
+
   </div>
-  
-  <!-- Settings View -->
-  <div id="settings-view" style="display:none">
-    <div class="header">
-      <button class="back-btn" id="back-btn">← 返回</button>
-      <div class="title">股票设置</div>
-    </div>
-    <div class="input-group">
-      <input type="text" class="stock-input" id="stock-input" placeholder="输入代码如 600519，美股带前缀us">
-      <button class="add-btn" id="add-btn">添加</button>
-    </div>
-    <ul class="stock-list" id="settings-stock-list"></ul>
-  </div>
-  
+
+  <script src="shared.js"></script>
+  <script src="market.js"></script>
   <script src="popup.js"></script>
 </body>
+
 </html>

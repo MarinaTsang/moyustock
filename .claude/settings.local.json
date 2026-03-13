@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm install:*)",
+      "Bash(npx playwright:*)",
+      "Bash(npm test:*)",
+      "WebSearch",
+      "WebFetch(domain:blog.csdn.net)",
+      "WebFetch(domain:www.cnblogs.com)",
+      "WebFetch(domain:zhuanlan.zhihu.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:akshare.akfamily.xyz)"
+    ]
+  }
+}
