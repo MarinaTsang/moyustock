@@ -3,13 +3,15 @@
   "name": "股票行情",
   "version": "1.0",
   "description": "摸鱼看盘 - 在网页右下角以低打扰浮窗方式显示自选股票和大盘指数行情，不上传任何用户数据，仅访问 http://qt.gtimg.cn/* 获取行情。",
-  "permissions": ["scripting", "tabs", "storage", "alarms", "windows"],
+  "permissions": ["scripting", "tabs", "storage", "alarms", "windows", "cookies"],
   "host_permissions": [
     "http://qt.gtimg.cn/*",
     "https://news.google.com/*",
     "https://api.frankfurter.dev/*",
     "https://push2.eastmoney.com/*",
-    "https://push2his.eastmoney.com/*"
+    "https://push2his.eastmoney.com/*",
+    "https://weibo.com/*",
+    "https://web.im.weibo.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -20,6 +22,17 @@
       "js": ["shared.js", "market.js", "trend.js", "widgetView.js", "panelView.js", "carouselView.js", "anomalyMonitor.js", "content.js"],
       "css": ["content.css"],
       "run_at": "document_end"
+    },
+    {
+      "matches": ["https://weibo.com/*"],
+      "js": ["weibo_main.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://weibo.com/*"],
+      "js": ["weibo.js"],
+      "run_at": "document_start"
     }
   ],
   "icons": {

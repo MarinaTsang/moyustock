@@ -10,7 +10,7 @@
       <div class="lt-header">
         <div class="lt-header-left">
           <div class="lt-market-index" id="lt-market-index"></div>
-          <div class="lt-stealth-title" id="lt-stealth-title">Tasks</div>
+          <div class="lt-stealth-title" id="lt-stealth-title">新闻</div>
           <span class="lt-mood-dot" id="lt-mood-dot"></span>
           <button type="button" class="lt-btn lt-btn-save" id="lt-btn-save" title="保存并返回" style="display:none">保存</button>
         </div>
@@ -23,15 +23,17 @@
         <div class="lt-tip" id="lt-tip" style="display:none">在扩展图标弹窗中添加自选股票</div>
         <div class="lt-mode-toggle" id="lt-mode-toggle">
           <button type="button" class="lt-mode-option is-active" id="lt-mode-normal">Normal</button>
-          <button type="button" class="lt-mode-option" id="lt-mode-stealth">Stealth</button>
+          <button type="button" class="lt-mode-option" id="lt-mode-stealth">新闻</button>
         </div>
         <div class="lt-stock-panel" id="lt-stock-panel">
           <div class="lt-stock-list-viewport" id="lt-stock-list-viewport">
             <div class="lt-stock-list" id="lt-stock-list"></div>
           </div>
         </div>
+        <div class="lt-news-ticker" id="lt-news-ticker" style="display:none"></div>
         <div class="lt-ai-summary" id="lt-ai-summary" style="display:none"></div>
         <div class="lt-critical-hint" id="lt-critical-hint" style="display:none">有股票涨跌超 3%，建议抽空看一下</div>
+        <div class="lt-weibo-panel" id="lt-weibo-panel" style="display:none"></div>
         <div class="lt-debug-panel" id="lt-debug-panel" style="display:none"></div>
       </div>
     `;
@@ -49,8 +51,10 @@
         btnClose: wrap.querySelector('.lt-btn-close'),
         marketIndexEl: wrap.querySelector('#lt-market-index'),
         tipEl: wrap.querySelector('#lt-tip'),
+        newsTickerEl: wrap.querySelector('#lt-news-ticker'),
         aiSummaryEl: wrap.querySelector('#lt-ai-summary'),
         criticalHintEl: wrap.querySelector('#lt-critical-hint'),
+        weiboPanelEl: wrap.querySelector('#lt-weibo-panel'),
         debugPanelEl: wrap.querySelector('#lt-debug-panel')
       }
     };

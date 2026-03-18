@@ -258,6 +258,40 @@
   content: "• ";
 }
 
+#lt-stock-float .lt-weibo-panel {
+  border-top: 1px solid rgba(55, 53, 47, 0.1);
+  padding: 4px 8px 5px;
+}
+
+#lt-stock-float .lt-weibo-msg {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(55, 53, 47, 0.05);
+  overflow: hidden;
+}
+
+#lt-stock-float .lt-weibo-msg:last-child {
+  border-bottom: none;
+}
+
+#lt-stock-float .lt-weibo-sender {
+  font-size: 10px;
+  font-weight: 700;
+  color: #e6162d;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+#lt-stock-float .lt-weibo-text {
+  font-size: 10px;
+  color: #2c2c2c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 #lt-stock-float .lt-debug-panel {
   margin-top: 6px;
   padding: 6px;
@@ -549,48 +583,53 @@
   padding-top: 8px;
 }
 
-#lt-stock-float.lt-mode-stealth .lt-stock-list {
-  gap: 2px;
-}
-
-#lt-stock-float.lt-mode-stealth .lt-stock-list-viewport.lt-viewport-fixed {
-  height: 102px;
-}
-
-#lt-stock-float.lt-mode-stealth .lt-stock-row {
-  display: block;
-  padding: 6px 4px;
-  border-radius: 6px;
-  transition: background-color 0.18s ease;
-}
-
-#lt-stock-float.lt-mode-stealth .lt-stock-row:hover {
-  background: rgba(55, 53, 47, 0.06);
-}
-
-#lt-stock-float.lt-mode-stealth .lt-stock-row .lt-name,
-#lt-stock-float.lt-mode-stealth .lt-stock-row .lt-price,
-#lt-stock-float.lt-mode-stealth .lt-stock-row .lt-change,
-#lt-stock-float.lt-mode-stealth .lt-stock-row .lt-trend {
+/* 新闻模式：隐藏股价面板，显示新闻 ticker */
+#lt-stock-float.lt-mode-stealth .lt-stock-panel {
   display: none;
 }
 
-#lt-stock-float.lt-mode-stealth .lt-stock-row .lt-stealth-task {
-  display: block;
+#lt-stock-float.lt-mode-stealth .lt-news-ticker {
+  display: block !important;
 }
 
-#lt-stock-float.lt-mode-stealth .lt-stock-row.lt-row-critical-new {
-  background-color: rgba(46, 170, 220, 0.12);
-  animation: none;
+/* 新闻 ticker */
+#lt-stock-float .lt-news-ticker {
+  padding: 4px 2px 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-#lt-stock-float.lt-mode-stealth .lt-stock-row.lt-row-critical-old {
-  background-color: rgba(55, 53, 47, 0.05);
+#lt-stock-float .lt-news-item {
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(55, 53, 47, 0.08);
 }
 
-#lt-stock-float.lt-mode-stealth .lt-stock-row.lt-error .lt-stealth-task {
-  display: block;
-  color: #a94442;
+#lt-stock-float .lt-news-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+#lt-stock-float .lt-news-source {
+  font-size: 10px;
+  font-weight: 700;
+  color: #888;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+#lt-stock-float .lt-news-headline {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #2c2c2c;
+  word-break: break-all;
+}
+
+#lt-stock-float .lt-news-empty {
+  font-size: 11px;
+  color: #aaa;
+  font-style: italic;
 }
 
 #lt-stock-float .lt-settings-input-row {

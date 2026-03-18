@@ -149,8 +149,10 @@
         btnClose,
         marketIndexEl,
         tipEl,
+        newsTickerEl,
         aiSummaryEl,
         criticalHintEl,
+        weiboPanelEl,
         debugPanelEl
       } = shell.refs;
       const cleanupFns = [];
@@ -171,6 +173,10 @@
           clearTimeout(criticalHintTimer);
           criticalHintTimer = null;
         }
+        if (newsTimer) {
+          clearInterval(newsTimer);
+          newsTimer = null;
+        }
       };
       widgetCleanup = cleanupCurrentWidget;
       // 三态状态机相关（仅在该浮窗作用域内生效）
@@ -188,12 +194,100 @@
       let devModeEnabled = false;
       let debugPanelOpen = false;
 
+      // ========== 新闻模式 ==========
+      const NEWS_VISIBLE = 3;     // 同时显示条数
+      const newsCache = {};       // code → [headline string, ...]
+      let newsItems = [];         // [{name, text}, ...]
+      let newsPos = 0;
+      let newsTimer = null;
+
+      function stopNewsTicker() {
+        if (newsTimer) { clearInterval(newsTimer); newsTimer = null; }
+      }
+
+      function renderWeiboPanelMsgs(msgs) {
+        if (!weiboPanelEl) return;
+        if (!Array.isArray(msgs) || !msgs.length) {
+          weiboPanelEl.style.display = 'none';
+          return;
+        }
+        const esc = widgetView.escapeHtml;
+        weiboPanelEl.style.display = '';
+        weiboPanelEl.innerHTML = msgs.slice(-3).reverse().map(m =>
+          `<div class="lt-weibo-msg"><span class="lt-weibo-sender">${esc(m.sender)}</span><span class="lt-weibo-text">${esc(m.text)}</span></div>`
+        ).join('');
+      }
+
+      chrome.storage.local.get(['weiboMsgs'], (r) => {
+        renderWeiboPanelMsgs(r.weiboMsgs || []);
+      });
+
+      function renderNewsItems() {
+        if (!newsTickerEl) return;
+        if (!newsItems.length) {
+          newsTickerEl.innerHTML = '<div class="lt-news-empty">新闻加载中…</div>';
+          return;
+        }
+        const esc = widgetView.escapeHtml;
+        const count = Math.min(NEWS_VISIBLE, newsItems.length);
+        let html = '';
+        for (let i = 0; i < count; i++) {
+          const item = newsItems[(newsPos + i) % newsItems.length];
+          html += `<div class="lt-news-item"><div class="lt-news-source">${esc(item.name)}</div><div class="lt-news-headline">${esc(item.text)}</div></div>`;
+        }
+        newsTickerEl.innerHTML = html;
+      }
+
+      function startNewsTicker() {
+        stopNewsTicker();
+        if (!newsTickerEl) return;
+        newsPos = 0;
+        renderNewsItems();
+        if (newsItems.length > NEWS_VISIBLE) {
+          newsTimer = setInterval(() => {
+            newsPos = (newsPos + 1) % newsItems.length;
+            renderNewsItems();
+          }, 5000);
+        }
+      }
+
+      async function fetchNewsForMode() {
+        if (!newsTickerEl) return;
+        newsTickerEl.innerHTML = '<div class="lt-news-empty">新闻加载中…</div>';
+        const codes = stockList.length > 0 ? stockList.slice(0, 5) : [DEFAULT_STOCK];
+        const results = await Promise.all(codes.map(async (code) => {
+          if (newsCache[code]) return { code, headlines: newsCache[code] };
+          try {
+            const res = await chrome.runtime.sendMessage({
+              type: 'GET_AI_STOCK_SUMMARY', code,
+              name: (lastStockDataByCode[code] && lastStockDataByCode[code].name) || code,
+            });
+            const headlines = res && res.ok && Array.isArray(res.headlines)
+              ? res.headlines.map(h => String(h.title || '')).filter(Boolean) : [];
+            newsCache[code] = headlines;
+            return { code, headlines };
+          } catch (_) { return { code, headlines: [] }; }
+        }));
+        newsItems = [];
+        for (const { code, headlines } of results) {
+          const name = (lastStockDataByCode[code] && lastStockDataByCode[code].name) || code;
+          headlines.slice(0, 3).forEach(text => {
+            const t = text.length > 48 ? text.slice(0, 48) + '…' : text;
+            newsItems.push({ name, text: t });
+          });
+        }
+        if (displayMode === 'stealth') startNewsTicker();
+      }
+
       function applyDisplayMode(mode) {
         displayMode = mode === 'stealth' ? 'stealth' : 'normal';
         widgetView.setDisplayMode(wrap, displayMode);
         widgetView.setModeToggleState(modeNormalBtn, modeStealthBtn, displayMode);
-        if (displayMode === 'stealth' && criticalHintEl) {
-          criticalHintEl.style.display = 'none';
+        if (displayMode === 'stealth') {
+          if (criticalHintEl) criticalHintEl.style.display = 'none';
+          fetchNewsForMode().then(() => { if (displayMode === 'stealth') startNewsTicker(); });
+        } else {
+          stopNewsTicker();
         }
         renderAiSummary(currentDisplayCodes);
       }
@@ -1021,6 +1115,9 @@
           } else {
             renderAiSummary(currentDisplayCodes);
           }
+        }
+        if (changes.weiboMsgs) {
+          renderWeiboPanelMsgs(changes.weiboMsgs.newValue || []);
         }
         // 股票列表被其他标签或 popup 修改时，同步到本地并刷新浮窗
         if (!changes.stockList) return;

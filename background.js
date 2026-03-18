@@ -17,6 +17,41 @@ const DIGEST_TTL_MS = 6 * 60 * 60 * 1000; // 6 小时
 
 let digestPopupWindowId = null;
 
+// ===== 微博群消息（WebSocket 拦截）=====
+const WEIBO_GROUP_NAME = '真爱粉自由讨论群';
+
+async function handleWeiboWsMsg(raw) {
+  const t = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  await chrome.storage.local.set({ weiboLastRaw: String(raw || '').slice(0, 400), weiboStatus: `收到推送 ${t}` }).catch(() => {});
+
+  let arr;
+  try { arr = JSON.parse(raw); } catch (_) { return; }
+  if (!Array.isArray(arr)) return;
+
+  const stored = await chrome.storage.local.get(['weiboMsgs']);
+  let existing = Array.isArray(stored.weiboMsgs) ? stored.weiboMsgs : [];
+  let changed = false;
+
+  for (const item of arr) {
+    const d = item && item.data;
+    if (!d || d.type !== 'groupchat') continue;
+    const info = d.info;
+    if (!info) continue;
+    const gname = String(info.group_name || '');
+    if (gname && !gname.includes(WEIBO_GROUP_NAME)) continue;
+    const text = String(info.content || '').trim();
+    const sender = String((info.from_user && info.from_user.screen_name) || '').trim();
+    if (!text || !sender) continue;
+    const id = String(info.id || Date.now());
+    if (existing.some(m => m.id === id)) continue;
+    existing = [...existing, { id, sender, text, time: String(info.time || t) }].slice(-5);
+    changed = true;
+  }
+
+  if (!changed) return;
+  await chrome.storage.local.set({ weiboMsgs: existing, weiboStatus: `新消息 ${t}` });
+}
+
 function isWeekend(date = new Date()) {
   const d = date.getDay();
   return d === 0 || d === 6;
@@ -490,6 +525,35 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
     })();
     return true;
+  }
+
+  if (msg.type === 'GET_SECTOR_HEATMAP') {
+    (async () => {
+      try {
+        const fs = encodeURIComponent('m:90+t:2');
+        const fields = 'f14,f3,f62';
+        const url = `https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=7&po=1&np=1&fltt=2&invt=2&fid=f62&fs=${fs}&fields=${fields}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('fetch failed: ' + res.status);
+        const j = await res.json();
+        const diff = (j && j.data && Array.isArray(j.data.diff)) ? j.data.diff : [];
+        const items = diff.map((item) => ({
+          name: item.f14 || '',
+          changePct: item.f3 != null ? item.f3 : 0,
+          mainNetIn: item.f62 != null ? item.f62 : 0,
+        })).filter((item) => item.name);
+        sendResponse({ ok: true, items });
+      } catch (e) {
+        sendResponse({ ok: false, error: (e && e.message) || 'error' });
+      }
+    })();
+    return true;
+  }
+
+  if (msg.type === 'LT_WEIBO_WS_MSG') {
+    handleWeiboWsMsg(msg.data).catch(() => {});
+    sendResponse({ ok: true });
+    return;
   }
 
   if (msg.type !== 'GET_AI_STOCK_SUMMARY') return;
