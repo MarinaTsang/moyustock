@@ -666,15 +666,7 @@
     renderStockList(); // 先渲染一次（无名称）
     await renderDebugInfo();
     statusEl.textContent = '网页浮窗负责监控，当前面板仅做设置和状态查看';
-    await loadWeiboConfig();
     await startDigestAutoRefresh();
-  }
-
-  const weiboPollStatus = document.getElementById('weibo-poll-status');
-
-  async function loadWeiboConfig() {
-    const stored = await chrome.storage.local.get(['weiboStatus']);
-    if (weiboPollStatus) weiboPollStatus.textContent = stored.weiboStatus || '';
   }
 
   wakeBtn.addEventListener('click', wakeCurrentTabFloat);
@@ -692,9 +684,6 @@
     }
     if (changes.stockList || changes[BOSS_KEY_STORAGE] || changes[DISPLAY_MODE_STORAGE]) {
       await renderDebugInfo();
-    }
-    if (changes.weiboStatus && weiboPollStatus) {
-      weiboPollStatus.textContent = changes.weiboStatus.newValue || '';
     }
   });
 

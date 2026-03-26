@@ -33,7 +33,6 @@
         <div class="lt-news-ticker" id="lt-news-ticker" style="display:none"></div>
         <div class="lt-ai-summary" id="lt-ai-summary" style="display:none"></div>
         <div class="lt-critical-hint" id="lt-critical-hint" style="display:none">有股票涨跌超 3%，建议抽空看一下</div>
-        <div class="lt-weibo-panel" id="lt-weibo-panel" style="display:none"></div>
         <div class="lt-debug-panel" id="lt-debug-panel" style="display:none"></div>
       </div>
     `;
@@ -54,7 +53,6 @@
         newsTickerEl: wrap.querySelector('#lt-news-ticker'),
         aiSummaryEl: wrap.querySelector('#lt-ai-summary'),
         criticalHintEl: wrap.querySelector('#lt-critical-hint'),
-        weiboPanelEl: wrap.querySelector('#lt-weibo-panel'),
         debugPanelEl: wrap.querySelector('#lt-debug-panel')
       }
     };

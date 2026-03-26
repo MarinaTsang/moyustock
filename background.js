@@ -17,41 +17,6 @@ const DIGEST_TTL_MS = 6 * 60 * 60 * 1000; // 6 小时
 
 let digestPopupWindowId = null;
 
-// ===== 微博群消息（WebSocket 拦截）=====
-const WEIBO_GROUP_NAME = '真爱粉自由讨论群';
-
-async function handleWeiboWsMsg(raw) {
-  const t = new Date().toLocaleTimeString('zh-CN', { hour12: false });
-  await chrome.storage.local.set({ weiboLastRaw: String(raw || '').slice(0, 400), weiboStatus: `收到推送 ${t}` }).catch(() => {});
-
-  let arr;
-  try { arr = JSON.parse(raw); } catch (_) { return; }
-  if (!Array.isArray(arr)) return;
-
-  const stored = await chrome.storage.local.get(['weiboMsgs']);
-  let existing = Array.isArray(stored.weiboMsgs) ? stored.weiboMsgs : [];
-  let changed = false;
-
-  for (const item of arr) {
-    const d = item && item.data;
-    if (!d || d.type !== 'groupchat') continue;
-    const info = d.info;
-    if (!info) continue;
-    const gname = String(info.group_name || '');
-    if (gname && !gname.includes(WEIBO_GROUP_NAME)) continue;
-    const text = String(info.content || '').trim();
-    const sender = String((info.from_user && info.from_user.screen_name) || '').trim();
-    if (!text || !sender) continue;
-    const id = String(info.id || Date.now());
-    if (existing.some(m => m.id === id)) continue;
-    existing = [...existing, { id, sender, text, time: String(info.time || t) }].slice(-5);
-    changed = true;
-  }
-
-  if (!changed) return;
-  await chrome.storage.local.set({ weiboMsgs: existing, weiboStatus: `新消息 ${t}` });
-}
-
 function isWeekend(date = new Date()) {
   const d = date.getDay();
   return d === 0 || d === 6;
@@ -548,12 +513,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
     })();
     return true;
-  }
-
-  if (msg.type === 'LT_WEIBO_WS_MSG') {
-    handleWeiboWsMsg(msg.data).catch(() => {});
-    sendResponse({ ok: true });
-    return;
   }
 
   if (msg.type !== 'GET_AI_STOCK_SUMMARY') return;

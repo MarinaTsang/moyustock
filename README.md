@@ -1,169 +1,120 @@
-# 股票行情 - 摸鱼看盘插件
+# Stock Float · 摸鱼看盘
 
-## 产品介绍
+[简体中文](doc/README.zh-CN.md)
 
-**股票行情**是一款专为上班族设计的Chrome浏览器插件，让您在工作时能够低调地查看股票行情，实现"摸鱼看盘"的完美体验。
+> A minimalist Chrome extension for discreet stock monitoring while working.
 
-### 核心特性
+![Chrome MV3](https://img.shields.io/badge/Chrome-MV3-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-- 🎯 **常驻浮窗**：在浏览器右下角显示一个小巧的浮窗，实时显示股票行情，不占用过多屏幕空间
-- 📊 **大盘指数**：标题栏实时显示上证指数（sh000001），随时掌握市场整体走势
-- 🔄 **智能轮播**：支持添加多个股票，超过3只时自动轮播展示，每4秒切换一次
-- 🎨 **摸鱼风格**：简洁低调的UI设计，浅灰色背景，不会引起同事注意
-- 💾 **数据持久化**：股票列表自动保存，关闭浏览器后重新打开依然保留
-- 🖱️ **交互友好**：鼠标悬停时暂停轮播，方便仔细查看数据；支持拖拽移动浮窗位置
-- 🌐 **网络智能**：自动检测网络状态，离线时显示提示，重连后自动恢复
+---
 
-## 安装方法
+### Overview
 
-1. 下载插件文件到本地
-2. 打开Chrome浏览器，访问 `chrome://extensions/`
-3. 开启右上角的"开发者模式"
-4. 点击"加载已解压的扩展程序"
-5. 选择插件所在的文件夹
-6. 安装完成后，插件图标会出现在浏览器工具栏
+Stock Float is a Chrome extension that embeds a compact, unobtrusive floating widget in the bottom-right corner of any webpage. It shows real-time stock quotes, intraday trend lines, and market indices — without requiring you to switch tabs or open a dedicated financial app.
 
-## 使用方法
+Designed for people who need to keep an eye on the market while working, it stays out of the way when nothing's happening and surfaces information precisely when it matters.
 
-### 首次使用
+---
 
-1. 安装插件后，浮窗会自动显示在网页右下角
-2. 如果浮窗未显示，点击浏览器工具栏的插件图标可以唤醒浮窗
-3. 点击浮窗右上角的设置按钮（⚙️）进入设置页面
-4. 在输入框中输入股票代码（如：`600519`），点击"添加"按钮
-5. 插件会自动识别交易所并补全前缀（如：`sh600519`）
-6. 添加完成后，点击"保存"按钮返回股票行情显示
+### Features
 
-### 添加股票
+#### Real-Time Quotes
+- Supports **A-shares** (Shanghai `sh`, Shenzhen `sz`, Beijing `bj`), **Hong Kong** (`hk`), and **US stocks** (`us`)
+- Displays stock name, current price, and change percentage
+- Intraday trend mini-chart sampled locally
+- Limit-up / limit-down badge for A-shares (±9.8%)
+- Shanghai Composite Index always shown in the header
 
-1. 点击浮窗右上角的设置按钮（⚙️）进入设置页面
-2. 在输入框中输入股票代码，点击"添加"按钮
-3. 股票会立即添加到列表中并显示在浮窗中
+#### Carousel & Watchlist
+- Up to 3 stocks displayed simultaneously; automatically rotates every 5 seconds when you have more
+- Manage your watchlist from the extension popup — supports codes like `600519`, `TSLA`, `00700`
+- Carousel position persists across page refreshes
 
-**支持的股票代码格式：**
+#### Three Presence States
+| State | Appearance | Condition |
+|-------|-----------|-----------|
+| **Silent** | 35% opacity, minimal | Outside trading hours |
+| **Active** | 85% opacity, normal | Market open, no significant moves |
+| **Critical** | 100% opacity, colored border | Any stock ±3% for 10+ seconds |
 
-- 上海主板/科创板：`6`开头（如：`600519` → `sh600519`）
-- 上海B股：`9`开头（如：`900901` → `sh900901`）
-- 深圳主板/创业板：`0`或`3`开头（如：`000001` → `sz000001`）
-- 深圳B股：`2`开头（如：`200055` → `sz200055`）
-- 北交所：`8`或`4`开头（如：`839719` → `bj839719`）
-- 港股：5位数字（如：`00700` → `hk00700`）
-- ETF/LOF基金：`1`开头 → `sz`，`5`开头 → `sh`
+Critical state distinguishes rising vs. falling with amber (up) vs. blue (down) accents and shows a contextual prompt.
 
-**注意**：只需输入数字代码，插件会自动识别并添加正确的前缀。
+#### Stealth / News Mode
+Switch the widget into a **"News"** disguise — it hides all stock data and shows recent financial headlines instead, making it look like a news reader to onlookers. Toggle between Normal and News mode inside the widget.
 
-### 删除股票
+#### Pre-Market & Post-Market Digest
+A digest popup automatically appears at key times:
+- **08:45 (pre-market)**: US market overnight summary, economic calendar
+- **15:05 (post-market)**: A-share sector heatmap, institutional fund flow, stock review
 
-1. 点击设置按钮（⚙️）进入设置页面
-2. 在股票列表中找到要删除的股票
-3. 点击该股票右侧的"删除"按钮
-4. 股票会立即从列表中移除
+The digest can also be opened manually from the popup.
 
-### 查看行情
+#### AI Stock Summary
+When a watchlist stock moves more than **5%**, the extension fetches recent news headlines from Google News and generates a concise plain-language reason summary. Cools down 30 minutes between triggers.
 
-插件会在网页右下角显示一个浮窗，实时显示股票行情。浮窗包含：
+#### Theme
+Follows the browser / OS color scheme automatically:
+- **Dark mode**: dark background, amber (up) / steel-blue (down)
+- **Light mode**: white background, amber-brown (up) / steel-blue (down)
+- No glaring red/green in either mode — intentionally low-profile
 
-- 标题栏：显示大盘指数（上证指数）
-- 股票列表：显示最多3只股票，超过3只时自动轮播
+#### Keyboard Shortcuts
+| Shortcut | Action |
+|----------|--------|
+| `Alt + Q` | Toggle widget visibility (Boss Key) |
+| `Alt + Shift + D` | Toggle debug panel |
 
-### 浮窗操作
+#### Privacy
+- No account required, no login
+- All data is fetched directly from public market APIs
+- Nothing is uploaded or sent to any third-party server
+- Watchlist stored locally in `chrome.storage.local`
 
-- **移动位置**：点击并拖拽浮窗顶部栏可以移动浮窗位置
-- **暂停轮播**：鼠标悬停在浮窗上时，轮播会自动暂停
-- **关闭浮窗**：点击浮窗右上角的"×"按钮可以关闭浮窗
-- **重新打开**：关闭后，点击浏览器工具栏的插件图标可以重新打开浮窗
+---
 
-## 功能说明
+### Installation
 
-### 股票显示
+1. Clone or download this repository
+2. Open Chrome and go to `chrome://extensions`
+3. Enable **Developer mode** (top-right toggle)
+4. Click **Load unpacked** and select the project folder
+5. Click the extension icon or press `Alt + Q` on any page
 
-- 最多同时显示3只股票
-- 超过3只时自动轮播，每4秒切换一次
-- 显示股票名称、当前价格、涨跌幅
-- 涨跌用红绿色区分（红色=涨，绿色=跌）
+---
 
-### 大盘指数
+### Data Sources
 
-- 标题栏实时显示上证指数（sh000001）
-- 显示指数点数和涨跌幅
-- 颜色跟随涨跌变化
+| Source | Used For |
+|--------|----------|
+| `qt.gtimg.cn` | Real-time A-share / HK / US quotes |
+| `push2.eastmoney.com` | Sector heatmap, fund flows, US indices |
+| `news.google.com` (RSS) | News headlines for AI summary |
+| `api.frankfurter.dev` | USD/CNH exchange rate |
 
-### 数据刷新
+---
 
-- 每2秒自动刷新一次股票数据
-- 切换标签页或唤醒屏幕时会立即刷新
-- 网络重连后自动恢复数据获取
+### Project Structure
 
-### 网络状态
+```
+├── manifest.json        # Extension manifest (MV3)
+├── background.js        # Service worker: quote proxy, digest alarms
+├── content.js           # Injected into every page: widget logic
+├── content.css          # Widget styles (dark/light theme via CSS variables)
+├── popup.html           # Extension popup UI
+├── popup.js             # Popup logic
+├── shared.js            # Shared utilities (quote parsing, normalization)
+├── market.js            # Market hours, exchange detection
+├── trend.js             # Intraday trend line rendering (SVG)
+├── widgetView.js        # Widget DOM creation
+├── panelView.js         # Settings panel view
+├── carouselView.js      # Carousel / rotation view
+├── anomalyMonitor.js    # Anomaly detection module
+└── crawler.js           # Data crawler (sector, fund flow)
+```
 
-- 离线时显示"离线"提示
-- 网络重连中显示"网络重连中…"
-- 数据过时显示"数据可能过时"提示
-- 请求超时（3秒）自动重试
+---
 
-## 常见问题
+### License
 
-### Q: 为什么看不到浮窗？
-
-A: 请确保：
-
-1. 插件已正确安装并启用
-2. 当前页面是 http:// 或 https:// 协议的网页
-3. 如果之前关闭过浮窗，需要点击插件图标重新打开
-
-### Q: 如何添加美股？
-
-A: 需要添加 `us`前缀，如：`TLS`（特斯拉），则是 `usTLS`。
-
-### Q: 股票数据不更新怎么办？
-
-A:
-
-1. 检查网络连接是否正常
-2. 切换标签页或唤醒屏幕时会自动刷新数据
-3. 如果持续不更新，可能是数据源问题，请稍后重试
-
-### Q: 可以同时监控多少只股票？
-
-A: 理论上没有限制，但建议不超过10只，以保证最佳使用体验。
-
-### Q: 浮窗位置可以保存吗？
-
-A: 可以。拖拽浮窗到合适位置后，位置会自动保存，下次打开时会恢复到上次的位置。
-
-## 技术支持
-
-如有问题或建议，请通过以下方式联系：
-
-- 查看浏览器控制台（F12）的错误信息
-- 检查插件是否已启用
-- 尝试重新加载插件
-
-## 权限与隐私说明
-
-- **网络权限**：
-  - 仅访问 `http://qt.gtimg.cn/*` 用于获取股票行情数据；
-  - 不访问其他站点的敏感接口。
-- **本地存储**：
-  - 使用 `chrome.storage.local` 存储自选股票代码列表；
-  - 使用 `localStorage` 存储浮窗位置与是否关闭浮窗的状态；
-  - 所有数据只保存在本地浏览器中。
-- **数据上传**：
-  - 插件不会将任何自选股、浏览记录或个人信息上传到任何服务器；
-  - 也不会收集、分析或出售用户数据。
-
-## 更新日志
-
-### v1.0
-
-- ✅ 初始版本发布
-- ✅ 支持股票行情实时显示
-- ✅ 支持多股票轮播
-- ✅ 支持大盘指数显示
-- ✅ 支持股票添加/删除
-- ✅ 支持浮窗拖拽
-- ✅ 支持网络状态检测
-
-## 免责声明
-
-本插件仅供学习和个人使用，股票数据来源于公开接口，仅供参考，不构成投资建议。投资有风险，入市需谨慎。
+MIT

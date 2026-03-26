@@ -152,7 +152,6 @@
         newsTickerEl,
         aiSummaryEl,
         criticalHintEl,
-        weiboPanelEl,
         debugPanelEl
       } = shell.refs;
       const cleanupFns = [];
@@ -205,22 +204,6 @@
         if (newsTimer) { clearInterval(newsTimer); newsTimer = null; }
       }
 
-      function renderWeiboPanelMsgs(msgs) {
-        if (!weiboPanelEl) return;
-        if (!Array.isArray(msgs) || !msgs.length) {
-          weiboPanelEl.style.display = 'none';
-          return;
-        }
-        const esc = widgetView.escapeHtml;
-        weiboPanelEl.style.display = '';
-        weiboPanelEl.innerHTML = msgs.slice(-3).reverse().map(m =>
-          `<div class="lt-weibo-msg"><span class="lt-weibo-sender">${esc(m.sender)}</span><span class="lt-weibo-text">${esc(m.text)}</span></div>`
-        ).join('');
-      }
-
-      chrome.storage.local.get(['weiboMsgs'], (r) => {
-        renderWeiboPanelMsgs(r.weiboMsgs || []);
-      });
 
       function renderNewsItems() {
         if (!newsTickerEl) return;
@@ -1115,9 +1098,6 @@
           } else {
             renderAiSummary(currentDisplayCodes);
           }
-        }
-        if (changes.weiboMsgs) {
-          renderWeiboPanelMsgs(changes.weiboMsgs.newValue || []);
         }
         // 股票列表被其他标签或 popup 修改时，同步到本地并刷新浮窗
         if (!changes.stockList) return;
